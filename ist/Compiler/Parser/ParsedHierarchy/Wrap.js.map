@@ -1,1 +1,0 @@
-{"version":3,"file":"Wrap.js","sourceRoot":"","sources":["../../../../src/Compiler/Parser/ParsedHierarchy/Wrap.ts"],"names":[],"mappings":"AAAA,OAAO,EACL,MAAM,GACP,MAAM,UAAU,CAAC;AAKlB,MAAM,OAAO,IAA8B,SAAQ,MAAM;IACvD,YAAoB,UAAa;QAC/B,KAAK,EAAE,CAAC;QADU,eAAU,GAAV,UAAU,CAAG;QAIjB,0BAAqB,GAAG,GAAkB,EAAE,CAAC,CAC3D,IAAI,CAAC,UAAU,CAChB,CAAC;IAJF,CAAC;CAKF"}

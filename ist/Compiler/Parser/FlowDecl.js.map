@@ -1,1 +1,0 @@
-{"version":3,"file":"FlowDecl.js","sourceRoot":"","sources":["../../../src/Compiler/Parser/FlowDecl.ts"],"names":[],"mappings":"AAIA,MAAM,OAAO,QAAQ;IACnB,YACkB,IAAY,EACZ,IAAgB,EAChB,UAAmB;QAFnB,SAAI,GAAJ,IAAI,CAAQ;QACZ,SAAI,GAAJ,IAAI,CAAY;QAChB,eAAU,GAAV,UAAU,CAAS;IAErC,CAAC;CACF"}
