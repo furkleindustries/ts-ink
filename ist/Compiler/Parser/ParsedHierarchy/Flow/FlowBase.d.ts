@@ -1,0 +1,46 @@
+import { Argument } from '../Argument';
+import { FlowLevel } from './FlowLevel';
+import { INamedContent } from '../../../../INamedContent';
+import { Object } from '../Object';
+import { RuntimeContainer } from '../../../../Runtime/Container';
+import { RuntimeDivert } from '../../../../Runtime/Divert/Divert';
+import { RuntimeObject } from '../../../../Runtime/Object';
+import { Story } from '../Story';
+import { VariableAssignment } from '../Variable/VariableAssignment';
+import { Weave } from '../Weave';
+export declare abstract class FlowBase extends Object implements INamedContent {
+    readonly name: string | null;
+    readonly args: Argument[] | null;
+    readonly isFunction: boolean;
+    abstract readonly flowLevel: FlowLevel;
+    _rootWeave: Weave;
+    _subFlowsByName: Record<string, FlowBase>;
+    _startingSubFlowDivert: RuntimeDivert;
+    _startingSubFlowRuntime: RuntimeObject;
+    _firstChildFlow: FlowBase;
+    variableDeclarations: Record<string, VariableAssignment>;
+    get hasParameters(): boolean;
+    get subFlowsByName(): Record<string, FlowBase>;
+    get typeName(): string;
+    constructor(name?: string | null, topLevelObjects?: Object[] | null, args?: Argument[] | null, isFunction?: boolean, isIncludedStory?: boolean);
+    readonly SplitWeaveAndSubFlowContent: (contentObjs: Object[], isRootStory: boolean) => Object[];
+    readonly PreProcessTopLevelObjects: (topLevelObjects: Object[]) => void;
+    VariableResolveResult: {
+        found: boolean;
+        isGlobal: boolean;
+        isArgument: boolean;
+        isTemporary: boolean;
+        ownerFlow: FlowBase;
+    };
+    ResolveVariableWithName: (varName: string, fromNode: Object) => this["VariableResolveResult"];
+    TryAddNewVariableDeclaration: (varDecl: VariableAssignment) => void;
+    ResolveWeavePointNaming: () => void;
+    readonly GenerateRuntimeObject: () => RuntimeObject;
+    readonly GenerateArgumentVariableAssignments: (container: RuntimeContainer) => void;
+    readonly ContentWithNameAtLevel: (name: string, level?: FlowLevel | null, deepSearch?: boolean) => Object;
+    readonly DeepSearchForAnyLevelContent: (name: string) => Object | null;
+    ResolveReferences: (context: Story) => void;
+    readonly CheckForDisallowedFunctionFlowControl: () => void;
+    readonly WarningInTermination: (terminatingObject: Object) => void;
+    readonly ToString: () => string;
+}

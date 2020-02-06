@@ -1,0 +1,30 @@
+{
+  "name": "ts-ink",
+  "version": "1.0.0",
+  "description": "A TypeScript translation of Inkle Studio's Ink narrative scripting language.",
+  "main": "dist/index.js",
+  "dependencies": {
+    "typescript": "^3.7.5"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/furkleindustries/ts-ink.git"
+  },
+  "keywords": [
+    "ink",
+    "typescript",
+    "inklecate",
+    "inkle"
+  ],
+  "author": "furkle",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/furkleindustries/ts-ink/issues"
+  },
+  "homepage": "https://github.com/furkleindustries/ts-ink#readme"
+}

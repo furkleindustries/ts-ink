@@ -1,0 +1,38 @@
+import { RuntimeContainer } from '../../../Runtime/Container';
+import { DebugMetadata } from '../../../DebugMetadata';
+import { FindQueryFunc } from './FindQueryFunc';
+import { FlowBase } from './Flow/FlowBase';
+import { RuntimeObject } from '../../../Runtime/Object';
+import { Path } from './Path';
+import { RuntimePath } from '../../../Runtime/Path';
+import { Story } from './Story';
+export declare abstract class Object {
+    abstract GenerateRuntimeObject(): RuntimeObject;
+    private _alreadyHadError;
+    private _alreadyHadWarning;
+    private _debugMetadata;
+    private _runtimeObject;
+    content: Object[];
+    parent: Object;
+    get debugMetadata(): DebugMetadata;
+    set debugMetadata(value: DebugMetadata);
+    get hasOwnDebugMetadata(): boolean;
+    get typeName(): string;
+    readonly GetType: () => string;
+    get story(): Story;
+    get runtimeObject(): RuntimeObject;
+    set runtimeObject(value: RuntimeObject);
+    get runtimePath(): RuntimePath;
+    get containerForCounting(): RuntimeContainer;
+    readonly PathRelativeTo: (otherObj: Object) => Path;
+    get ancestry(): Object[];
+    get descriptionOfScope(): string;
+    readonly AddContent: <T extends Object, V extends T | T[]>(subContent: V) => V extends T[] ? T[] : T;
+    readonly InsertContent: <T extends Object>(index: number, subContent: T) => T;
+    readonly Find: <T extends Object>(queryFunc?: FindQueryFunc<T>) => T;
+    readonly FindAll: <T extends Object>(queryFunc?: FindQueryFunc<T> | undefined, foundSoFar?: T[] | undefined) => T[];
+    readonly ResolveReferences: (context: Story) => void;
+    readonly ClosestFlowBase: () => FlowBase;
+    readonly Error: (message: string, source?: Object, isWarning?: boolean) => void;
+    readonly Warning: (message: string, source?: Object) => void;
+}

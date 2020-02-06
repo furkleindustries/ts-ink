@@ -1,0 +1,32 @@
+import { CommandType } from './CommandType';
+import { RuntimeObject } from './Object';
+export declare class RuntimeControlCommand extends RuntimeObject {
+    readonly commandType: CommandType;
+    constructor(commandType?: CommandType);
+    readonly Copy: () => RuntimeControlCommand;
+    static readonly EvalStart: () => RuntimeControlCommand;
+    static readonly EvalOutput: () => RuntimeControlCommand;
+    static readonly EvalEnd: () => RuntimeControlCommand;
+    static readonly Duplicate: () => RuntimeControlCommand;
+    static readonly PopEvaluatedValue: () => RuntimeControlCommand;
+    static readonly PopFunction: () => RuntimeControlCommand;
+    static readonly PopTunnel: () => RuntimeControlCommand;
+    static readonly BeginString: () => RuntimeControlCommand;
+    static readonly EndString: () => RuntimeControlCommand;
+    static readonly NoOp: () => RuntimeControlCommand;
+    static readonly ChoiceCount: () => RuntimeControlCommand;
+    static readonly Turns: () => RuntimeControlCommand;
+    static readonly TurnsSince: () => RuntimeControlCommand;
+    static readonly ReadCount: () => RuntimeControlCommand;
+    static readonly Random: () => RuntimeControlCommand;
+    static readonly SeedRandom: () => RuntimeControlCommand;
+    static readonly VisitIndex: () => RuntimeControlCommand;
+    static readonly SequenceShuffleIndex: () => RuntimeControlCommand;
+    static readonly StartThread: () => RuntimeControlCommand;
+    static readonly Done: () => RuntimeControlCommand;
+    static readonly End: () => RuntimeControlCommand;
+    static readonly ListFromInt: () => RuntimeControlCommand;
+    static readonly ListRange: () => RuntimeControlCommand;
+    static readonly ListRandom: () => RuntimeControlCommand;
+    readonly ToString: () => string;
+}

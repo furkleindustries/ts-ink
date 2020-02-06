@@ -1,0 +1,1 @@
+{"version":3,"file":"GatherPointToResolve.js","sourceRoot":"","sources":["../../../../../src/Compiler/Parser/ParsedHierarchy/Gather/GatherPointToResolve.ts"],"names":[],"mappings":"AAOA,MAAM,OAAO,oBAAoB;IAC/B,YACS,MAAqB,EACrB,gBAA+B;QAD/B,WAAM,GAAN,MAAM,CAAe;QACrB,qBAAgB,GAAhB,gBAAgB,CAAe;IAEvC,CAAC;CACH"}
