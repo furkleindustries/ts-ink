@@ -36,7 +36,7 @@ import {
 } from '../Weave';
 
 export class Sequence extends Object {
-  private _sequenceDivertsToResolve: SequenceDivertToResolve[];
+  private _sequenceDivertsToResolve: SequenceDivertToResolve[] = [];
 
   public sequenceElements: Object[];
 
@@ -51,7 +51,7 @@ export class Sequence extends Object {
 
     for (const elementContentList of elementContentLists) {
       const contentObjs = elementContentList.content;
-      let seqElObject: Object = null;
+      let seqElObject: Object | null = null;
 
       // Don't attempt to create a weave for the sequence element 
       // if the content list is empty. Weaves don't like it!

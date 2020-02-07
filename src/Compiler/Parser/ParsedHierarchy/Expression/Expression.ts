@@ -14,8 +14,8 @@ import {
 export abstract class Expression extends Object {
   public abstract GenerateIntoContainer: (container: RuntimeContainer) => void;
 
-  private _prototypeRuntimeConstantExpression: RuntimeContainer;
-  public outputWhenComplete: boolean;
+  private _prototypeRuntimeConstantExpression: RuntimeContainer | null = null;
+  public outputWhenComplete: boolean = false;
 
   public readonly GenerateRuntimeObject = (): RuntimeObject => {
     const container = new RuntimeContainer();
@@ -52,7 +52,10 @@ export abstract class Expression extends Object {
     }
 
     for (const runtimeObj of this._prototypeRuntimeConstantExpression.content) {
-      container.AddContent(runtimeObj.Copy());
+      const copy = runtimeObj.Copy();
+      if (copy) {
+        container.AddContent(copy);
+      }
     }
   }
 

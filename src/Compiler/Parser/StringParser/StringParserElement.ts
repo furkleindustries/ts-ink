@@ -1,11 +1,11 @@
 export class StringParserElement {
   public static _uniqueIdCounter: number;
 
-  public characterIndex: number;
-  public lineIndex: number;
-  public reportedErrorInScope: boolean;
-  public uniqueId: number;
-  public customFlags: number;
+  public characterIndex: number = 0;
+  public lineIndex: number = 0;
+  public reportedErrorInScope: boolean = false;
+  public uniqueId: number = 0;
+  public customFlags: number = 0;
 
   public readonly CopyFrom = (fromElement: StringParserElement): void => {
     StringParserElement._uniqueIdCounter++;

@@ -21,13 +21,16 @@ import {
 /// </summary>
 export class Pointer {
   constructor(
-    public container: RuntimeContainer = null,
-    public index: number = null,
+    public container: RuntimeContainer | null = null,
+    public index: number | null = null,
   )
   {}
 
-  public readonly Resolve = (): RuntimeObject => {
-    if (!this.container || this.index >= this.container.content.length) {
+  public readonly Resolve = (): RuntimeObject | null => {
+    if (!this.container ||
+      this.index === null ||
+      this.index >= this.container.content.length)
+    {
       return null;
     } else if (this.index < 0 || !this.container.content.length) {
       return this.container;
@@ -40,8 +43,10 @@ export class Pointer {
     return !Boolean(this.container);
   }
 
-  get path(): RuntimePath {
-    if (this.index >= 0) {
+  get path(): RuntimePath | null {
+    if (!this.container || !this.container.path) {
+      return null;
+    } else if (this.index !== null && this.index >= 0) {
       return this.container.path.PathByAppendingComponent(
         new RuntimePathComponent(this.index),
       );
@@ -50,11 +55,13 @@ export class Pointer {
     return this.container.path;
   }
 
-  public readonly ToString = (): string => (
-    this.container ?
-      `Ink Pointer -> ${this.container.path.ToString()} -- index ${this.index}` :
-      'Ink Pointer (null)'
-  );
+  public readonly ToString = (): string => {
+    if (this.container && this.container.path) {
+      return `Ink Pointer -> ${this.container.path.ToString()} -- index ${this.index}`;
+    }
+
+    return 'Ink Pointer (null)';
+  };
 
   public static readonly StartOf = (container: RuntimeContainer) => (
     new Pointer(

@@ -132,29 +132,27 @@ export class RuntimeStory extends RuntimeObject {
   }
 
   private _variableObservers: Map<string, VariableObserver[]>;
-  get variableObservers(): Map<string, VariableObserver[]> {
+  get variableObserversMap() {
     return this._variableObservers;
   }
 
   private _hasValidatedExternals: boolean;
-  get hasValidatedExternals(): boolean {
+  get hasValidatedExternals() {
     return this._hasValidatedExternals;
   }
 
-  private _temporaryEvaluationContainer: RuntimeContainer;
-  get temporaryEvaluationContainer(): RuntimeContainer {
+  private _temporaryEvaluationContainer: RuntimeContainer | null;
+  get temporaryEvaluationContainer() {
     return this._temporaryEvaluationContainer;
   }
 
-  get currentDebugMetadata(): DebugMetadata {
-    let dm: DebugMetadata;
-
+  get currentDebugMetadata(): DebugMetadata | null {
     // Try to get from the current path first
     let pointer = this.state.currentPointer;
     if (!pointer.isNull) {
-      dm = pointer.Resolve().debugMetadata;
-      if (dm) {
-        return dm;
+      const resolved = pointer.Resolve();
+      if (resolved && resolved.debugMetadata) {
+        return resolved.debugMetadata;
       }
     }
 
@@ -162,9 +160,9 @@ export class RuntimeStory extends RuntimeObject {
     for (let ii = this.state.callStack.elements.length - 1; ii >= 0; --ii) {
       pointer = this.state.callStack.elements[ii].currentPointer;
       if (!pointer.isNull && pointer.Resolve()) {
-        dm = pointer.Resolve().debugMetadata;
-        if (dm) {
-          return dm;
+        const resolved = pointer.Resolve();
+        if (resolved && resolved.debugMetadata) {
+          return resolved.debugMetadata;
         }
       }
     }
@@ -174,9 +172,8 @@ export class RuntimeStory extends RuntimeObject {
     // As a last resort, try to grab something from the output stream
     for (let ii = this.state.outputStream.length - 1; ii >= 0; --ii) {
       const outputObj = this.state.outputStream[ii];
-      dm = outputObj.debugMetadata;
-      if (dm) {
-        return dm;
+      if (outputObj.debugMetadata) {
+        return outputObj.debugMetadata;
       }
     }
 
@@ -212,8 +209,8 @@ export class RuntimeStory extends RuntimeObject {
     return this._asyncContinueActive;
   }
 
-  private _stateSnapshotAtLastNewline: StoryState = null;
-  get stateSnapshotAtLastNewline(): StoryState {
+  private _stateSnapshotAtLastNewline: StoryState | null = null;
+  get stateSnapshotAtLastNewline() {
     return this._stateSnapshotAtLastNewline;
   }
 
@@ -227,8 +224,8 @@ export class RuntimeStory extends RuntimeObject {
     return this._asyncSaving;
   }
 
-  private _profiler: Profiler;
-  get profiler(): Profiler {
+  private _profiler: Profiler | null;
+  get profiler() {
     return this._profiler;
   }
 
@@ -367,7 +364,7 @@ export class RuntimeStory extends RuntimeObject {
   public readonly StartProfiling = (): Profiler => {
     this.IfAsyncWeCant('start profiling');
     this._profiler = new Profiler();
-    return this.profiler;
+    return this.profiler!;
   };
 
   /// <summary>
@@ -384,7 +381,7 @@ export class RuntimeStory extends RuntimeObject {
     jsonString,
   }: {
     readonly contentContainer?: RuntimeContainer,
-    readonly lists?: RuntimeListDefinition[],
+    readonly lists?: RuntimeListDefinition[] | null,
     readonly jsonString?: string,
   } = {}) {
     super();
@@ -464,13 +461,10 @@ export class RuntimeStory extends RuntimeObject {
 
     // List definitions
     listDefs: story.listDefinitions ?
-      story.listDefinitions.lists.reduce((
+      Array.from(story.listDefinitions.lists.entries()).reduce((
         obj,
-        {
-          name,
-          items,
-        },
-      ) => Object.assign(obj, { [name]: items })) :
+        [ key, { items } ],
+      ) => Object.assign(obj, { [key]: items })) :
       null,
   });
 
@@ -837,9 +831,9 @@ export class RuntimeStory extends RuntimeObject {
     this.mainContentContainer.ContentAtPath(path)
   );
 
-  public readonly KnotContainerWithName = (name: string): RuntimeContainer => {
+  public readonly KnotContainerWithName = (name: string): RuntimeContainer | null => {
     const namedContent = this.mainContentContainer.namedContent;
-    const namedContainer: RuntimeContainer = namedContent[name] as RuntimeContainer;
+    const namedContainer: RuntimeContainer = namedContent.get(name) as RuntimeContainer;
     if (namedContainer) {
       return namedContainer as RuntimeContainer;
     }
@@ -857,7 +851,7 @@ export class RuntimeStory extends RuntimeObject {
     let pathLengthToUse = path.length;
 
     let result: SearchResult;
-    if (path.lastComponent.isIndex) {
+    if (path.lastComponent && path.lastComponent.isIndex) {
       pathLengthToUse = path.length - 1;
       result = this.mainContentContainer.ContentAtPath(path, 0, pathLengthToUse);
       point.container = result.container;
@@ -895,6 +889,10 @@ export class RuntimeStory extends RuntimeObject {
   };
 
   public readonly RestoreStateSnapshot = (): void => {
+    if (!this.stateSnapshotAtLastNewline) {
+      throw new Error();
+    }
+
     // Patched state had temporarily hijacked our
     // VariablesState and set its own callstack on it,
     // so we need to restore that.
@@ -1010,6 +1008,10 @@ export class RuntimeStory extends RuntimeObject {
     // Stop flow if we hit a stack pop when we're unable to pop (e.g. return/done statement in knot
     // that was diverted to rather than called as a function)
     let currentContentObj = pointer.Resolve();
+    if (!currentContentObj) {
+      return;
+    }
+
     const isLogicOrFlowControl: boolean = this.PerformLogicAndFlowControl(
       currentContentObj,
     );
@@ -1056,7 +1058,7 @@ export class RuntimeStory extends RuntimeObject {
       if (this.state.inExpressionEvaluation) {
         // Expression evaluation content
         this.state.PushEvaluationStack(currentContentObj);
-      } else {
+      } else if (currentContentObj) {
         // Output stream content (i.e. not expression evaluation)
         this.state.PushToOutputStream(currentContentObj);
       }
@@ -1106,7 +1108,7 @@ export class RuntimeStory extends RuntimeObject {
 
     // First, find the previously open set of containers
     this.prevContainers.splice(0, this.prevContainers.length);
-    if (!previousPointer.isNull) {
+    if (previousPointer && !previousPointer.isNull) {
       let prevAncestor: RuntimeContainer = previousPointer.Resolve() as RuntimeContainer ||
         previousPointer.container as RuntimeContainer;
 
@@ -1118,10 +1120,11 @@ export class RuntimeStory extends RuntimeObject {
 
     // If the new object is a container itself, it will be visited automatically at the next actual
     // content step. However, we need to walk up the new ancestry to see if there are more new containers
-    let currentChildOfContainer: RuntimeObject = pointer.Resolve();
+    let currentChildOfContainer: RuntimeObject | null = pointer.Resolve();
 
-    // Invalid pointer? May happen if attemptingto 
-    if (currentChildOfContainer === null) {
+    // Invalid pointer? May happen if attemptingto
+    // furkle: to what lol?
+    if (!currentChildOfContainer) {
       return;
     }
 
@@ -1153,7 +1156,7 @@ export class RuntimeStory extends RuntimeObject {
     }
   };
       
-  public readonly ProcessChoice = (choicePoint: ChoicePoint): RuntimeChoice => {3
+  public readonly ProcessChoice = (choicePoint: ChoicePoint): RuntimeChoice | null => {
     let showChoice = true;
 
     // Don't create choice if choice point doesn't pass conditional
@@ -1194,6 +1197,10 @@ export class RuntimeStory extends RuntimeObject {
 
     const choice = new RuntimeChoice();
     choice.targetPath = choicePoint.pathOnChoice;
+    if (!choicePoint.path) {
+      throw new Error();
+    }
+
     choice.sourcePath = choicePoint.path.ToString();
     choice.isInvisibleDefault = choicePoint.isInvisibleDefault;
 
@@ -1279,8 +1286,16 @@ export class RuntimeStory extends RuntimeObject {
         }
 
         const target = varContents as DivertTargetValue;
+        if (!target.targetPath) {
+          throw new Error();
+        }
+
         this.state.divertedPointer = this.PointerAtPath(target.targetPath);
       } else if (currentDivert.isExternal) {
+        if (currentDivert.targetPathString === null) {
+          throw new Error();
+        }
+
         this.CallExternalFunction(
           currentDivert.targetPathString,
           currentDivert.externalArgs,
@@ -1291,6 +1306,11 @@ export class RuntimeStory extends RuntimeObject {
         this.state.divertedPointer = currentDivert.targetPointer;
       }
 
+      if (currentDivert.stackPushType === null) {
+        throw new Error();
+      }
+
+
       if (currentDivert.pushesToStack) {
         this.state.callStack.Push(
           currentDivert.stackPushType, 
@@ -1298,10 +1318,14 @@ export class RuntimeStory extends RuntimeObject {
         );
       }
 
-      if (this.state.divertedPointer.isNull && !currentDivert.isExternal) {
+      if (this.state.divertedPointer &&
+        this.state.divertedPointer.isNull &&
+        !currentDivert.isExternal)
+      {
         // Human readable name available - runtime divert is part of a hard-written divert that to missing content
-        if (currentDivert && currentDivert.debugMetadata.sourceName !== null) {
-          this.Error(`Divert target doesn't exist: ${currentDivert.debugMetadata.sourceName}`);
+        const debugMetadata = currentDivert.debugMetadata;
+        if (debugMetadata && debugMetadata.sourceName !== null) {
+          this.Error(`Divert target doesn't exist: ${debugMetadata.sourceName}`);
         } else {
           this.Error(`Divert resolution failed: ${currentDivert}`);
         }
@@ -1370,10 +1394,10 @@ export class RuntimeStory extends RuntimeObject {
 
           // Tunnel onwards is allowed to specify an optional override
           // divert to go to immediately after returning: ->-> target
-          let overrideTunnelReturnTarget: DivertTargetValue = null;
+          let overrideTunnelReturnTarget: DivertTargetValue | null = null;
           if (popType === PushPopType.Tunnel) {
             var popped = this.state.PopEvaluationStack();
-            const overrideTunnelReturnTarget = popped as DivertTargetValue;
+            overrideTunnelReturnTarget = popped as DivertTargetValue;
             if (overrideTunnelReturnTarget === null) {
               if (!(popped instanceof Void)) {
                 throw new Error(
@@ -1404,7 +1428,9 @@ export class RuntimeStory extends RuntimeObject {
             this.state.PopCallstack();
 
             // Does tunnel onwards override by diverting to a new ->-> target?
-            if (overrideTunnelReturnTarget) {
+            if (overrideTunnelReturnTarget &&
+              overrideTunnelReturnTarget.targetPath)
+            {
               this.state.divertedPointer = this.PointerAtPath(
                 overrideTunnelReturnTarget.targetPath,
               );
@@ -1493,6 +1519,10 @@ export class RuntimeStory extends RuntimeObject {
           }
               
           const divertTarget = target as DivertTargetValue;
+          if (!divertTarget.targetPath) {
+            throw new Error();
+          }
+
           const container = this.ContentAtPath(
             divertTarget.targetPath,
           ).correctObj as RuntimeContainer;
@@ -1567,6 +1597,10 @@ export class RuntimeStory extends RuntimeObject {
           break;
 
         case CommandType.VisitIndex:
+          if (!this.state.currentPointer.container) {
+            throw new Error();
+          }
+
           const count = this.state.VisitCountForContainer(
             this.state.currentPointer.container,
           ) - 1; // index not count
@@ -1616,7 +1650,7 @@ export class RuntimeStory extends RuntimeObject {
             ); 
           }
 
-          let generatedListValue: ListValue = null;
+          let generatedListValue: ListValue | null = null;
 
           const foundListDef = this.listDefinitions.GetListDefinition(listNameVal.value);
           if (foundListDef) {
@@ -1648,13 +1682,13 @@ export class RuntimeStory extends RuntimeObject {
           const min = this.state.PopEvaluationStack() as IntValue;
           const targetList = this.state.PopEvaluationStack() as ListValue;
 
-          if (!targetList || !min || !max) {
+          if (!targetList || !min || !min.value || !max || !max.value) {
             throw new StoryError(
               'Expected list, minimum and maximum for LIST_RANGE',
             );
           }
 
-          const list = targetList.value.ListWithSubRange(min.valueObject, max.valueObject);
+          const list = targetList.value.ListWithSubRange(min.value, max.value);
           this.state.PushEvaluationStack(new ListValue({ list }));
 
           break;
@@ -1667,7 +1701,7 @@ export class RuntimeStory extends RuntimeObject {
           }
 
           const list = listVal.value;
-          let newList: RuntimeInkList = null;
+          let newList: RuntimeInkList | null = null;
 
           if (list.Size() === 0) {
             // List was empty: return empty list
@@ -1682,6 +1716,10 @@ export class RuntimeStory extends RuntimeObject {
 
             // Iterate through to get the random element
             const randomItem = list.orderedItems[Number(listItemIndex)];
+
+            if (!randomItem[0].originName) {
+              throw new Error();
+            }
 
             // Origin list is simply the origin of the one element
             newList = new RuntimeInkList({
@@ -1708,22 +1746,30 @@ export class RuntimeStory extends RuntimeObject {
     } else if (contentObj instanceof RuntimeVariableAssignment) {
       // Variable assignment
       const varAss = contentObj as RuntimeVariableAssignment;
-      const assignedVal = this.state.PopEvaluationStack();
+      const assignedVal = this.state.PopEvaluationStack() as Value;
       this.state.variablesState.Assign(varAss, assignedVal);
 
       return true;
     } else if (contentObj instanceof RuntimeVariableReference) {
       // Variable reference
       const varRef = contentObj as RuntimeVariableReference;
-      let foundValue: RuntimeObject = null;
+      let foundValue: RuntimeObject | null = null;
 
       // Explicit read count value
       if (varRef.pathForCount != null) {
         const container = varRef.containerForCount;
+        if (!container) {
+          throw new Error();
+        }
+
         const count = this.state.VisitCountForContainer(container);
         foundValue = new IntValue(count);
       } else {
         // Normal variable reference
+        if (!varRef.name) {
+          throw new Error();
+        }
+
         foundValue = this.state.variablesState.GetVariableWithName(varRef.name);
         if (!foundValue) {
           this.Warning(
@@ -1805,7 +1851,7 @@ export class RuntimeStory extends RuntimeObject {
       if (this.state.callStack.currentElement.type === PushPopType.Function) {
         let funcDetail: string = '';
         const container = this.state.callStack.currentElement.currentPointer.container;
-        if (container !== null) {
+        if (container && container.path) {
           funcDetail = `(${container.path.ToString()})`;
         }
 
@@ -1858,6 +1904,10 @@ export class RuntimeStory extends RuntimeObject {
       this.onMakeChoice(choiceToChoose);
     }
 
+    if (!choiceToChoose.threadAtGeneration || !choiceToChoose.targetPath) {
+      throw new Error();
+    }
+
     this.state.callStack.currentThread = choiceToChoose.threadAtGeneration;
 
     this.ChoosePath(choiceToChoose.targetPath);
@@ -1903,7 +1953,7 @@ export class RuntimeStory extends RuntimeObject {
 
     // Get the content that we need to run
     const funcContainer = this.KnotContainerWithName(functionName);
-    if (funcContainer) {
+    if (!funcContainer) {
       throw new Error(`Function doesn't exist: '${functionName}'`);
     }
 
@@ -1935,7 +1985,7 @@ export class RuntimeStory extends RuntimeObject {
 
   // Evaluate a "hot compiled" piece of ink content, as used by the REPL-like
   // CommandLinePlayer.
-  readonly EvaluateExpression = (exprContainer: RuntimeContainer): RuntimeObject => {
+  readonly EvaluateExpression = (exprContainer: RuntimeContainer): RuntimeObject | null => {
     const startCallStackHeight = this.state.callStack.elements.length;
 
     this.state.callStack.Push(PushPopType.Tunnel);
@@ -1977,8 +2027,8 @@ export class RuntimeStory extends RuntimeObject {
     funcName: string,
     numberOfArguments: number,
   ): void => {
-    const func: ExternalFunction = this.externals[funcName];
-    let fallbackFunctionContainer: RuntimeContainer = null;
+    const func: ExternalFunction | undefined = this.externals.get(funcName);
+    let fallbackFunctionContainer: RuntimeContainer | null = null;
 
     // Try to use fallback function?
     if (!func) {
@@ -2010,7 +2060,7 @@ export class RuntimeStory extends RuntimeObject {
     const args = [];
     for (let ii = 0; ii < numberOfArguments; ++ii) {
       const poppedObj = this.state.PopEvaluationStack() as Value;
-      const valueObj = poppedObj.valueObject;
+      const valueObj = poppedObj.value;
       args.unshift(valueObj);
     }
 
@@ -2018,7 +2068,7 @@ export class RuntimeStory extends RuntimeObject {
     const funcResult = func(args);
 
     // Convert return value (if any) to the a type that the ink engine can use
-    let returnObj: RuntimeObject = null;
+    let returnObj: RuntimeObject | null = null;
     if (funcResult) {
       returnObj = Value.Create(funcResult);
       if (!returnObj !== null) {
@@ -2049,13 +2099,13 @@ export class RuntimeStory extends RuntimeObject {
       throw new Error(`Function '${funcName}' has already been bound.`);
     }
 
-    this.externals[funcName] = func;
+    this.externals.set(funcName, func);
   };
 
   public readonly TryCoerce = <T extends 'float' | 'int' | 'boolean' | 'string'>(
     value: any,
     T: T,
-  ): number | boolean | string => {
+  ): number | boolean | string | null => {
     if (value === null || value === undefined) {
       return null;
     }
@@ -2135,7 +2185,7 @@ export class RuntimeStory extends RuntimeObject {
     if (divert && divert.isExternal) {
       const name = divert.targetPathString;
 
-      if (!(name in this.externals)) {
+      if (name && !this.externals.has(name)) {
         if (this.allowExternalFunctionFallbacks) {
           const fallbackFound = name in this.mainContentContainer.namedContent;
           if (!fallbackFound) {
@@ -2204,7 +2254,7 @@ export class RuntimeStory extends RuntimeObject {
   ): void => {
     this.IfAsyncWeCant('observe a new variable');
 
-    if (!this.variableObservers) {
+    if (!this.variableObserversMap) {
       this._variableObservers = new Map();
     }
 
@@ -2214,10 +2264,13 @@ export class RuntimeStory extends RuntimeObject {
       );
     }
 
-    if (this.variableObservers.has(variableName)) {
-      this.variableObservers[variableName].push(observer);
+    if (this.variableObserversMap.has(variableName)) {
+      const observers = this.variableObserversMap.get(variableName);
+      if (observers) {
+        observers.push(observer);
+      }
     } else {
-      this.variableObservers[variableName] = [ observer ];
+      this.variableObserversMap.set(variableName, [ observer ]);
     }
   };
 
@@ -2247,41 +2300,48 @@ export class RuntimeStory extends RuntimeObject {
   /// <param name="observer">(Optional) The observer to stop observing.</param>
   /// <param name="specificVariableName">(Optional) Specific variable name to stop observing.</param>
   public readonly RemoveVariableObserver = (
-    observer: VariableObserver = null,
-    specificVariableName: string = null,
+    observer: VariableObserver | null = null,
+    specificVariableName: string | null = null,
   ) => {
     this.IfAsyncWeCant('remove a variable observer');
 
-    if (!this.variableObservers) {
+    if (!this.variableObserversMap) {
       return;
     }
 
     // Remove observer for this specific variable
     if (specificVariableName) {
-      if (this.variableObservers.has(specificVariableName)) {
+      if (this.variableObserversMap.has(specificVariableName)) {
         if (observer) {
-          this.variableObservers.get(specificVariableName).splice(
-            this.variableObservers.get(specificVariableName).indexOf(observer),
-            1,
-          );
-          if (!this.variableObservers.get(specificVariableName)) {
-            this.variableObservers.delete(specificVariableName);
+          const observers = this.variableObserversMap.get(specificVariableName);
+          if (observers) {
+            observers.splice(
+              observers.indexOf(observer),
+              1,
+            );
+          }
+
+          if (!this.variableObserversMap.get(specificVariableName)) {
+            this.variableObserversMap.delete(specificVariableName);
           }
         } else {
-          this.variableObservers.delete(specificVariableName);
+          this.variableObserversMap.delete(specificVariableName);
         }
       }
     } else if (observer) {
       // Remove observer for all variables
-      const keys = [ ...this.variableObservers.keys() ];
+      const keys = [ ...this.variableObserversMap.keys() ];
       for (const varName of keys) {
-        this.variableObservers.get(varName).splice(
-          this.variableObservers.get(varName).indexOf(observer),
-          1,
-        );
+        const observers = this.variableObserversMap.get(varName);
+        if (observers) {
+          observers.splice(
+            observers.indexOf(observer),
+            1,
+          );
+        }
 
-        if (!this.variableObservers.get(varName)) {
-          this.variableObservers.delete(varName);
+        if (!this.variableObserversMap.get(varName)) {
+          this.variableObserversMap.delete(varName);
         }
       }
     }
@@ -2291,11 +2351,14 @@ export class RuntimeStory extends RuntimeObject {
     variableName: string,
     newValueObj: RuntimeObject,
   ) => {
-    if (!this.variableObservers) {
+    if (!this.variableObserversMap) {
       return;
     }
 
-    const observers: VariableObserver[] = this.variableObservers.get(variableName);
+    const observers: VariableObserver[] | undefined = this.variableObserversMap.get(
+      variableName,
+    );
+
     if (observers) {
       if (!(newValueObj instanceof Value)) {
         throw new Error(
@@ -2305,7 +2368,7 @@ export class RuntimeStory extends RuntimeObject {
 
       const val = newValueObj as Value;
       for (const observer of observers) {
-        observer(variableName, val.valueObject);
+        observer(variableName, val.value);
       }
     }
   };
@@ -2365,30 +2428,36 @@ export class RuntimeStory extends RuntimeObject {
   /// It's only recommended that this is used on very short debug stories, since
   /// it can end up generate a large quantity of text otherwise.
   /// </summary>
-  public readonly BuildStringOfHierarchy = (): string => (
-    this.mainContentContainer.BuildStringOfHierarchy(
-      '',
-      0,
-      this.state.currentPointer.Resolve(),
-    )
-  );
+  public readonly BuildStringOfHierarchy = (): string => {
+    const resolved = this.state.currentPointer.Resolve();
+    if (!resolved) {
+      throw new Error();
+    }
+
+    return this.mainContentContainer.BuildStringOfHierarchy('', 0, resolved);
+  };
 
   public readonly BuildStringOfContainer = (
     container: RuntimeContainer,
-  ): string => (
-    container.BuildStringOfHierarchy(
+  ): string => {
+    const resolved = this.state.currentPointer.Resolve();
+    if (!resolved) {
+      throw new Error();
+    }
+
+    return container.BuildStringOfHierarchy(
       '',
       0,
-      this.state.currentPointer.Resolve(),
-    )
-  );
+      resolved,
+    );
+  };
 
   public readonly NextContent = () => {
     // Setting previousContentObject is critical for VisitChangedContainersDueToDivert
     this.state.previousPointer = this.state.currentPointer;
 
     // Divert step?
-    if (!this.state.divertedPointer.isNull) {
+    if (this.state.divertedPointer && !this.state.divertedPointer.isNull) {
       this.state.currentPointer = this.state.divertedPointer;
       this.state.divertedPointer = Pointer.Null;
 
@@ -2441,19 +2510,24 @@ export class RuntimeStory extends RuntimeObject {
     let successfulIncrement = true;
 
     let pointer = this.state.callStack.currentElement.currentPointer;
-    pointer.index += 1;
+    pointer.index = pointer.index === null ? 1 : pointer.index + 1;
+
+    const pointerContainer = pointer.container;
+    if (!pointerContainer) {
+      throw new Error();
+    }
 
     // Each time we step off the end, we fall out to the next container, all the
     // while we're in indexed rather than named content
-    while (pointer.index >= pointer.container.content.length) {
+    while (pointer.index! >= pointerContainer.content.length) {
       successfulIncrement = false;
 
-      const nextAncestor = pointer.container.parent as RuntimeContainer;
+      const nextAncestor = pointerContainer.parent as RuntimeContainer;
       if (!nextAncestor) {
         break;
       }
 
-      const indexInAncestor = nextAncestor.content.indexOf(pointer.container);
+      const indexInAncestor = nextAncestor.content.indexOf(pointerContainer);
       if (indexInAncestor === -1) {
         break;
       }
@@ -2461,7 +2535,7 @@ export class RuntimeStory extends RuntimeObject {
       pointer = new Pointer(nextAncestor, indexInAncestor);
 
       // Increment to next content in outer container
-      pointer.index += 1;
+      pointer.index = pointer.index === null ? 1 : pointer.index + 1;
 
       successfulIncrement = true;
     }
@@ -2479,12 +2553,21 @@ export class RuntimeStory extends RuntimeObject {
     const allChoices = this.state.currentChoices;
 
     // Is a default invisible choice the ONLY choice?
-    const invisibleChoices = allChoices.filter((c) => c.isInvisibleDefault);
-    if (!invisibleChoices.length || allChoices.length > invisibleChoices.length) {
+    const invisibleChoices = allChoices.filter(({ isInvisibleDefault }) => (
+      isInvisibleDefault
+    ));
+
+    if (!invisibleChoices.length ||
+      allChoices.length > invisibleChoices.length)
+    {
       return false;
     }
 
     const choice = invisibleChoices[0];
+
+    if (!choice.threadAtGeneration || !choice.targetPath) {
+      throw new Error();
+    }
 
     // Invisible choice may have been generated on a different thread,
     // in which case we need to restore it before we continue
@@ -2506,24 +2589,32 @@ export class RuntimeStory extends RuntimeObject {
   // from a consistent seed each time.
   // TODO: Is this the best algorithm it can be?
   get nextSequenceShuffleIndex(): number {
-    var numElementsIntVal = this.state.PopEvaluationStack () as IntValue;
-    if (numElementsIntVal === null) {
+    const numElementsIntVal = this.state.PopEvaluationStack () as IntValue;
+    if (!numElementsIntVal) {
       this.Error('expected number of elements in sequence for shuffle index');
       return 0;
     }
 
     const seqContainer = this.state.currentPointer.container;
-    let numElements = numElementsIntVal.value;
+    const numElements = numElementsIntVal.value;
     const seqCountVal = this.state.PopEvaluationStack () as IntValue;
     const seqCount = seqCountVal.value;
     const loopIndex = seqCount / numElements;
     const iterationIndex = seqCount % numElements;
 
+    if (!seqContainer) {
+      throw new Error();
+    }
+
+    const seqContainerPath = seqContainer.path;
+    if (!seqContainerPath) {
+      throw new Error();
+    }
     // Generate the same shuffle based on:
     //  - The hash of this container, to make sure it's consistent
     //    each time the runtime returns to the sequence
     //  - How many times the runtime has looped around this full shuffle
-    const seqPathStr: string = seqContainer.path.ToString();
+    const seqPathStr: string = seqContainerPath.ToString();
     let sequenceHash = 0;
     for (const c of seqPathStr) {
       sequenceHash += c.charCodeAt(0);

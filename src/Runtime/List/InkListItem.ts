@@ -7,12 +7,12 @@ export class RuntimeInkListItem {
   /// <summary>
   /// The name of the list where the item was originally defined.
   /// </summary>
-  public readonly originName: string;
+  public readonly originName: string | null;
 
   /// <summary>
   /// The main name of the item as defined in ink.
   /// </summary>
-  public readonly itemName: string;
+  public readonly itemName: string | null;
 
   
   static get Null(): RuntimeInkListItem {
@@ -35,17 +35,17 @@ export class RuntimeInkListItem {
   /// item.
   /// </summary>
   constructor(
-    originNameOrFullName: string,
-    itemName?: string,
+    originNameOrFullName: string | null,
+    itemName?: string | null | undefined,
   )
   {
-    if (itemName === undefined) {
+    if (itemName === undefined && originNameOrFullName) {
       var nameParts = originNameOrFullName.split('.');
       this.originName = nameParts[0];
       this.itemName = nameParts[1];
     } else {
       this.originName = originNameOrFullName;
-      this.itemName = itemName;
+      this.itemName = itemName || null;
     }
   }
 

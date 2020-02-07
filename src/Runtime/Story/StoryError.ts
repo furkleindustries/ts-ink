@@ -4,13 +4,13 @@
 /// a bug in your ink, rather than in the ink engine itself!
 /// </summary>
 export class StoryError extends Error {
-  public useEndLineNumber: boolean;
+  public useEndLineNumber: boolean = false;
 
   /// <summary>
   /// Constructs an instance of a StoryException with a message.
   /// </summary>
   /// <param name="message">The error message.</param>
   constructor(message?: string) {
-    super(message || null);
+    super(message || undefined);
   }
 }

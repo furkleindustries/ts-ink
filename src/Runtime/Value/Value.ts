@@ -33,9 +33,13 @@ export abstract class Value<T extends UnderlyingValueTypes = UnderlyingValueType
   public abstract valueType: ValueType;
   public abstract isTruthy: boolean;
 
-  public abstract readonly Cast: (newType: ValueType) => Value;
+  public abstract readonly Cast: (newType: ValueType) => Value | null;
 
-  public static readonly Create = (val: any): Value => {
+  public static readonly Create = (val: any): Value | null => {
+    if (val === null || val === undefined) {
+      return null;
+    }
+
     let value: any = val;
     if (typeof value === 'number' && !Number.isNaN(value)) {
       if (value % 1 === 0) {
@@ -65,39 +69,48 @@ export abstract class Value<T extends UnderlyingValueTypes = UnderlyingValueType
     const newList = newValue as ListValue;
 
     // When assigning the emtpy list, try to retain any initial origin names
-    if (oldList && newList && newList.value.Size() === 0) {
+    if (oldList &&
+      oldList.value &&
+      newList &&
+      newList.value &&
+      !newList.value.Size())
+    {
       newList.value.SetInitialOriginNames(oldList.value.originNames);
     }
   };
 
-  public readonly Copy = (): Value => (
-    Value.Create(this.valueObject)
-  );
+  public readonly Copy = (): Value | null => {
+    if (!this.value) {
+      return null;
+    }
+
+    return Value.Create(this.value);
+  };
 
   public readonly BadCastException = (targetType: ValueType): Error => (
-    new Error(`Can't cast ${this.valueObject} from ${this.valueType} to ${targetType}`)
+    new Error(`Can't cast ${this.value} from ${this.valueType} to ${targetType}`)
   );
+  
+  protected _value: T | null = null;
+  get value(): T | null {
+    if (!this._value) {
+      throw new Error();
+    }
 
-  get value(): T {
     return this._value;
   }
 
-  set value(value: T) {
+  set value(value: T | null) {
     this._value = value;
-  } 
-
-  get valueObject(): T {
-    return this.value;
   }
 
-  constructor(
-    protected _value: T,
-  )
-  {
+  constructor() {
     super();
   }
 
   public readonly ToString = (): string => (
-    'ToString' in this.value ? (this.value as any).ToString() : String(this.value)
+    (this.value && 'ToString' in this.value) ?
+      (this.value as any).ToString() :
+      String(this.value)
   );
 }

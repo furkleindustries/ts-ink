@@ -21,15 +21,21 @@ import {
 } from '../SymbolType';
 
 export class Gather extends Object implements INamedContent, IWeavePoint {
+  public readonly name: string = '';
+
   get runtimeContainer(): RuntimeContainer {
     return this.runtimeObject as RuntimeContainer; 
   }
 
   constructor(
-    public readonly name: string,
+    name: string | null,
     public readonly indentationDepth: number,
   ) {
     super();
+
+    if (name) {
+      this.name = name;
+    }
   }
       
   public readonly GenerateRuntimeObject = (): RuntimeObject => {
@@ -43,7 +49,7 @@ export class Gather extends Object implements INamedContent, IWeavePoint {
     container.countingAtStartOnly = true;
 
     // A gather can have null content, e.g. it's just purely a line with "-"
-    if (this.content !== null) {
+    if (this.content) {
       for (const c of this.content) {
         container.AddContent(c.runtimeObject);
       }

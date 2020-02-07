@@ -23,9 +23,9 @@ export abstract class RuntimeObject {
   /// Usually parents are Container objects. (TODO: Always?)
   /// </summary>
   /// <value>The parent.</value>
-  public parent: RuntimeObject;
+  public parent: RuntimeObject | null = null;
 
-  get debugMetadata(): DebugMetadata { 
+  get debugMetadata(): DebugMetadata | null { 
     if (this._debugMetadata === null) {
       if (this.parent) {
         return this.parent.debugMetadata;
@@ -38,17 +38,17 @@ export abstract class RuntimeObject {
   // TODO: Come up with some clever solution for not having
   // to have debug metadata on the object itself, perhaps
   // for serialisation purposes at least.
-  private _debugMetadata: DebugMetadata;
+  private _debugMetadata: DebugMetadata | null = null;
 
-  set debugMetadata(value: DebugMetadata) {
-    this._debugMetadata = value;
+  set debugMetadata(value: DebugMetadata | null) {
+    this._debugMetadata = value || null;
   }
 
-  get ownDebugMetadata(): DebugMetadata {
+  get ownDebugMetadata() {
     return this._debugMetadata;
   }
 
-  public readonly DebugLineNumberOfPath = (path: RuntimePath): number => {
+  public readonly DebugLineNumberOfPath = (path: RuntimePath | null): number | null => {
     if (path === null) {
       return null;
     }
@@ -68,8 +68,8 @@ export abstract class RuntimeObject {
     return null;
   };
 
-  private _path: RuntimePath;
-  get path(): RuntimePath {
+  private _path: RuntimePath | null = null;
+  get path(): RuntimePath | null {
     if (this._path === null) {
       if (parent === null) {
         this._path = new RuntimePath();
@@ -98,7 +98,7 @@ export abstract class RuntimeObject {
       }
     }
 
-    return this._path;
+    return this._path || null;
   };
 
   public readonly ResolvePath = (path: RuntimePath): SearchResult => {
@@ -131,12 +131,15 @@ export abstract class RuntimeObject {
 
   public readonly ConvertPathToRelative = (
     globalPath: RuntimePath,
-  ): RuntimePath => {
+  ): RuntimePath | null => {
     // 1. Find last shared ancestor
     // 2. Drill up using ".." style (actually represented as "^")
     // 3. Re-build downward chain from common ancestor
 
     const ownPath = this.path;
+    if (!ownPath) {
+      return null;
+    }
 
     const minPathLength = Math.min(globalPath.length, ownPath.length);
     let lastSharedPathCompIndex = -1;
@@ -178,13 +181,21 @@ export abstract class RuntimeObject {
 
   // Find most compact representation for a path, whether relative or global
   public readonly CompactPathString = (otherPath: RuntimePath) => {
-    let globalPathStr: string = null;
-    let relativePathStr: string = null;
+    let globalPathStr: string | null = null;
+    let relativePathStr: string | null = null;
+    if (!this.path) {
+      return null;
+    }
+
     if (otherPath.isRelative) {
       relativePathStr = otherPath.componentsString;
       globalPathStr = this.path.PathByAppendingPath(otherPath).componentsString;
     } else {
       const relativePath = this.ConvertPathToRelative(otherPath);
+      if (!relativePath) {
+        return null;
+      }
+
       relativePathStr = relativePath.componentsString;
       globalPathStr = otherPath.componentsString;
     }
@@ -205,7 +216,7 @@ export abstract class RuntimeObject {
     return ancestor as RuntimeContainer;
   }
 
-  public readonly Copy = (): RuntimeObject => {
+  public readonly Copy = (): RuntimeObject | null => {
     const typed = 'GetType' in this ? (this as any).GetType() : 'Object';
     throw new Error(`${typed} doesn't support copying.`);
   };

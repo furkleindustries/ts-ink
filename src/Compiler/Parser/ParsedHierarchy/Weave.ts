@@ -66,8 +66,8 @@ export class Weave extends Object {
   // rootContainer is always the first in the chain, while
   // currentContainer is the latest.
   get rootContainer(): RuntimeContainer {
-    if (this._rootContainer === null) {
-      this.GenerateRuntimeObject();
+    if (!this._rootContainer) {
+      this._rootContainer = this.GenerateRuntimeObject();
     }
 
     return this._rootContainer;
@@ -80,35 +80,38 @@ export class Weave extends Object {
   //  - to remove it from the list of loose ends when
   //     - it has indented content since it's no longer a loose end
   //     - it's a gather and it has a choice added to it
-  public previousWeavePoint: IWeavePoint = null;
+  public previousWeavePoint: IWeavePoint | null = null;
   public addContentToPreviousWeavePoint: boolean = false;
 
   // Used for determining whether the next Gather should auto-enter
   public hasSeenChoiceInSection: boolean = false;
 
-  public currentContainer: RuntimeContainer;
+  public currentContainer: RuntimeContainer | null = null;
   public baseIndentIndex: number;
 
-  private _unnamedGatherCount: number;
-  private _choiceCount: number;
-  private _rootContainer: RuntimeContainer;
-  private _namedWeavePoints: Record<string, IWeavePoint>;
+  private _unnamedGatherCount: number = 0;
+  private _choiceCount: number = 0;
+  private _rootContainer: RuntimeContainer | null = null;
+  private _namedWeavePoints: Map<string, IWeavePoint> = new Map();
+  get namedWeavePoints() {
+    return this._namedWeavePoints;
+  }
 
   // Loose ends are:
   //  - Choices or Gathers that need to be joined up
   //  - Explicit Divert to gather points (i.e. "->" without a target)
-  public looseEnds: IWeavePoint[];
+  public looseEnds: IWeavePoint[] = [];
 
-  public gatherPointsToResolve: GatherPointToResolve[];
+  public gatherPointsToResolve: GatherPointToResolve[] = [];
 
-  get lastParsedSignificantObject(): Object {
+  get lastParsedSignificantObject(): Object | null {
     if (this.content.length === 0) {
       return null;
     }
 
     // Don't count extraneous newlines or VAR/CONST declarations,
     // since they're "empty" statements outside of the main flow.
-    let lastObject: Object = null;
+    let lastObject: Object | null = null;
     for (let ii = this.content.length - 1; ii >= 0; --ii) {
       lastObject = this.content[ii];
 
@@ -147,23 +150,26 @@ export class Weave extends Object {
   }
 
   public readonly ResolveWeavePointNaming = (): void => {
-    const namedWeavePoints = this.FindAll<IWeavePoint>(w => Boolean(w.name));
-    this._namedWeavePoints = {};
+    const namedWeavePoints = this.FindAll<IWeavePoint>();
+    this._namedWeavePoints = new Map();
 
     for (const weavePoint of namedWeavePoints) {
       // Check for weave point naming collisions
-      let existingWeavePoint: IWeavePoint;
-      if (existingWeavePoint = this._namedWeavePoints[weavePoint.name]) {
+      const existingWeavePoint: IWeavePoint | null | undefined = this.namedWeavePoints.get(
+        weavePoint.name,
+      );
+
+      if (existingWeavePoint) {
         const typeName = existingWeavePoint instanceof Gather ? 'gather' : 'choice';
         const existingObj: Object = existingWeavePoint;
 
         this.Error(
-          `A ${typeName} with the same label name '${weavePoint.name}' already exists in this context on line ${existingObj.debugMetadata.startLineNumber}`,
+          `A ${typeName} with the same label name '${weavePoint.name}' already exists in this context on line ${existingObj.debugMetadata ? existingObj.debugMetadata.startLineNumber : 'NO DEBUG METADATA AVAILABLE'}`,
           weavePoint as Object,
         );
       }
 
-      this._namedWeavePoints[weavePoint.name] = weavePoint;
+      this.namedWeavePoints.set(weavePoint.name, weavePoint);
     }
   };
 
@@ -229,7 +235,7 @@ export class Weave extends Object {
     return 0;
   };
 
-  public readonly GenerateRuntimeObject = (): RuntimeObject => {
+  public readonly GenerateRuntimeObject = (): RuntimeContainer => {
     this._rootContainer = new RuntimeContainer();
     this.currentContainer = this._rootContainer;
     this.looseEnds = [];
@@ -287,6 +293,10 @@ export class Weave extends Object {
     }
         
     if (autoEnter) {
+      if (!this.currentContainer) {
+        throw new Error();
+      }
+
       // Auto-enter: include in main content
       this.currentContainer.AddContent(gatherContainer);
     } else {
@@ -294,7 +304,7 @@ export class Weave extends Object {
       // Add this gather to the main content, but only accessible
       // by name so that it isn't stepped into automatically, but only via
       // a divert from a loose end.
-      this._rootContainer.AddToNamedContentOnly (gatherContainer);
+      this.rootContainer.AddToNamedContentOnly (gatherContainer);
     }
 
     // Consume loose ends: divert them to this gather
@@ -311,13 +321,17 @@ export class Weave extends Object {
         }
       }
 
-      let divert: RuntimeDivert = null;
+      let divert: RuntimeDivert | null = null;
       if (looseEnd instanceof Divert) {
         divert = looseEnd.runtimeObject as RuntimeDivert;
       } else {
-          divert = new RuntimeDivert();
-          var looseWeavePoint = looseEnd as IWeavePoint;
-          looseWeavePoint.runtimeContainer.AddContent (divert);
+        divert = new RuntimeDivert();
+        const looseWeavePoint = looseEnd as IWeavePoint;
+        if (!looseWeavePoint.runtimeContainer) {
+          throw new Error();
+        }
+
+        looseWeavePoint.runtimeContainer.AddContent(divert);
       }
           
       // Pass back knowledge of this loose end being diverted
@@ -341,6 +355,10 @@ export class Weave extends Object {
     } else if (weavePoint instanceof Choice) {
       // Current level choice
 
+      if (!this.currentContainer) {
+        throw new Error();
+      }
+
       // Gathers that contain choices are no longer loose ends
       // (same as when weave points get nested content)
       if (this.previousWeavePoint instanceof Gather) {
@@ -352,6 +370,10 @@ export class Weave extends Object {
 
       // Add choice point content
       const choice = weavePoint as Choice;
+      if (!choice.innerContentContainer) {
+        throw new Error();
+      }
+
       this.currentContainer.AddContent(choice.runtimeObject);
 
       // Add choice's inner content to self
@@ -404,8 +426,16 @@ export class Weave extends Object {
     }
     
     if (this.addContentToPreviousWeavePoint) {
-      this.previousWeavePoint.runtimeContainer.AddContent (content);
+      if (!this.previousWeavePoint || !this.previousWeavePoint.runtimeContainer) {
+        throw new Error();
+      }
+
+      this.previousWeavePoint.runtimeContainer.AddContent(content);
     } else {
+      if (!this.currentContainer) {
+        throw new Error();
+      }
+
       this.currentContainer.AddContent (content);
     }
   };
@@ -439,8 +469,8 @@ export class Weave extends Object {
     //   }
     //   - more of outer weave
     //
-    let closestInnerWeaveAncestor: Weave = null;
-    let closestOuterWeaveAncestor: Weave = null;
+    let closestInnerWeaveAncestor: Weave | null = null;
+    let closestOuterWeaveAncestor: Weave | null = null;
 
     // Find inner and outer ancestor weaves as defined above.
     let nested = false;
@@ -491,7 +521,7 @@ export class Weave extends Object {
         }
       } else {
         // No nesting, all loose ends can be safely passed up
-        closestInnerWeaveAncestor.ReceiveLooseEnd(looseEnd);
+        closestInnerWeaveAncestor!.ReceiveLooseEnd(looseEnd);
         received = true;
       }
 
@@ -530,13 +560,13 @@ export class Weave extends Object {
     this.CheckForWeavePointNamingCollisions();
   };
 
-  public readonly WeavePointNamed = (name: string): IWeavePoint => {
-    if (this._namedWeavePoints === null) {
+  public readonly WeavePointNamed = (name: string): IWeavePoint | null => {
+    if (!this.namedWeavePoints) {
       return null;
     }
 
-    let weavePointResult: IWeavePoint = null;
-    if (weavePointResult = this._namedWeavePoints[name]) {
+    let weavePointResult: IWeavePoint | null | undefined = this.namedWeavePoints.get(name);
+    if (weavePointResult) {
       return weavePointResult;
     }
 
@@ -663,7 +693,7 @@ export class Weave extends Object {
   readonly BadNestedTerminationHandler: BadTerminationHandler = (
     terminatingObj,
   ) => {
-    let conditional: Conditional = null;
+    let conditional: Conditional | null = null;
     for (let ancestor = terminatingObj.parent; ancestor !== null; ancestor = ancestor.parent) {
       if (ancestor instanceof Sequence || ancestor instanceof Conditional) {
         conditional = ancestor as Conditional;
@@ -753,7 +783,7 @@ export class Weave extends Object {
   // Enforce rule that weave points must not have the same
   // name as any stitches or knots upwards in the hierarchy
   public readonly CheckForWeavePointNamingCollisions = (): void => {
-    if (this._namedWeavePoints === null) {
+    if (!this.namedWeavePoints) {
       return;
     }
  
@@ -768,18 +798,16 @@ export class Weave extends Object {
     }
 
 
-    for (const weavePointName in this._namedWeavePoints) {
-      const weavePoint = this._namedWeavePoints[weavePointName];
-
+    for (const [ key, value ] of this.namedWeavePoints) {
       for (const flow of ancestorFlows) {
         // Shallow search
-        const otherContentWithName = flow.ContentWithNameAtLevel(weavePointName);
-        if (otherContentWithName && otherContentWithName !== weavePoint) {
-          const errorMsg = `${weavePoint.GetType()} '${weavePointName}' has the same label name as a ${otherContentWithName.GetType()} (on ${otherContentWithName.debugMetadata})`;
+        const otherContentWithName = flow.ContentWithNameAtLevel(key);
+        if (otherContentWithName && otherContentWithName !== value) {
+          const errorMsg = `${value.GetType()} '${key}' has the same label name as a ${otherContentWithName.GetType()} (on ${otherContentWithName.debugMetadata})`;
 
           this.Error(
             errorMsg,
-            weavePoint,
+            value,
           );
         }
       }

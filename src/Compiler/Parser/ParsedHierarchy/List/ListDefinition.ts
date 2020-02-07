@@ -27,14 +27,14 @@ import {
 } from '../Variable/VariableAssignment';
 
 export class ListDefinition extends Object {
-  public name: string;
-  public variableAssignment: VariableAssignment;
+  public name: string = '';
+  public variableAssignment: VariableAssignment | null = null;
 
   get typeName() {
     return 'List definition';
   }
 
-  private _elementsByName: Record<string, ListElementDefinition>;
+  private _elementsByName: Map<string, ListElementDefinition> = new Map();
 
   get runtimeListDefinition(): RuntimeListDefinition {
     const allItems: Map<string, number> = new Map();
@@ -49,20 +49,22 @@ export class ListDefinition extends Object {
     return new RuntimeListDefinition(name, allItems);
   }
 
-  public readonly ItemNamed = (itemName: string): ListElementDefinition => {
+  public readonly ItemNamed = (
+    itemName: string,
+  ): ListElementDefinition | null => {
     if (this._elementsByName === null) {
-      this._elementsByName = {};
+      this._elementsByName = new Map();
       for (const el of this.itemDefinitions) {
-        this._elementsByName[el.name] = el;
+        this._elementsByName.set(el.name, el);
       }
     }
 
-    let foundElement: ListElementDefinition;
-    if (foundElement = this._elementsByName[itemName]) {
-      return foundElement;
-    }
+    const foundElement = this._elementsByName.get(
+      itemName,
+    ) || null;
 
-    return null;
+    
+    return foundElement;
   }
 
   constructor(public itemDefinitions: ListElementDefinition[]) {

@@ -3,8 +3,8 @@ import {
 } from './StringParserElement';
 
 export class StringParserState {
-  private _stack: StringParserElement[];
-  private _numElements: number;
+  private _stack: StringParserElement[] = [];
+  private _numElements: number = 0;
             
   get currentElement(): StringParserElement {
     return this._stack[this._numElements - 1];
@@ -88,7 +88,7 @@ export class StringParserState {
     return this._stack[this._numElements - 1];
   };
 
-  public readonly PeekPenultimate = (): StringParserElement => {
+  public readonly PeekPenultimate = (): StringParserElement | null => {
     if (this._numElements >= 2) {
       return this._stack[this._numElements - 2];
     }

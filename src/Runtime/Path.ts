@@ -15,11 +15,11 @@ export class RuntimePath {
   }
 
   private _components: RuntimePathComponent[] = [];
-  private _componentsString: string;
+  private _componentsString: string | null = null;
 
-  public isRelative: boolean;
+  public isRelative: boolean = false;
 
-  get head(): RuntimePathComponent { 
+  get head(): RuntimePathComponent | null { 
     if (this._components.length > 0) {
       return this._components[0];
     }
@@ -40,7 +40,7 @@ export class RuntimePath {
     return this._components.length;
   }
 
-  get lastComponent(): RuntimePathComponent { 
+  get lastComponent(): RuntimePathComponent | null { 
     const lastComponentIdx = this._components.length - 1;
     if (lastComponentIdx >= 0 ) {
       return this._components[lastComponentIdx];

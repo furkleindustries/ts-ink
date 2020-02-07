@@ -30,11 +30,11 @@ import {
 } from './VariableReference'
 
 export class VariableAssignment extends Object {
-  private _runtimeAssignment: RuntimeVariableAssignment;
+  private _runtimeAssignment: RuntimeVariableAssignment | null = null;
   
   public readonly variableName: string;
-  public readonly expression: Expression;
-  public readonly listDefinition: ListDefinition;
+  public readonly expression: Expression | null = null;
+  public readonly listDefinition: ListDefinition | null = null;
   public readonly isGlobalDeclaration: boolean;
   public readonly isNewTemporaryDeclaration: boolean;
 
@@ -73,18 +73,18 @@ export class VariableAssignment extends Object {
 
     // Defensive programming in case parsing of assignedExpression failed
     if (listDef instanceof ListDefinition) {
-      this.listDefinition = this.AddContent(listDef);
+      this.listDefinition = this.AddContent(listDef) as ListDefinition;
       this.listDefinition.variableAssignment = this;
 
       // List definitions are always global
       this.isGlobalDeclaration = true;
     } else if (assignedExpression) {
-      this.expression = this.AddContent(assignedExpression);
+      this.expression = this.AddContent(assignedExpression) as Expression;
     }
   }
 
-  public readonly GenerateRuntimeObject = (): RuntimeObject => {
-    let newDeclScope: FlowBase = null;
+  public readonly GenerateRuntimeObject = (): RuntimeObject | null => {
+    let newDeclScope: FlowBase | null | undefined = null;
     if (this.isGlobalDeclaration) {
       newDeclScope = this.story;
     } else if (this.isNewTemporaryDeclaration) {
@@ -92,7 +92,7 @@ export class VariableAssignment extends Object {
     }
 
     if (newDeclScope) {
-      newDeclScope.TryAddNewVariableDeclaration(this);
+      newDeclScope.AddNewVariableDeclaration(this);
     }
 
     // Global declarations don't generate actual procedural
@@ -105,9 +105,9 @@ export class VariableAssignment extends Object {
     const container = new RuntimeContainer();
 
     // The expression's runtimeObject is actually another nested container
-    if (this.expression !== null) {
+    if (this.expression) {
       container.AddContent(this.expression.runtimeObject);
-    } else if (this.listDefinition !== null) {
+    } else if (this.listDefinition) {
       container.AddContent(this.listDefinition.runtimeObject);
     }
 

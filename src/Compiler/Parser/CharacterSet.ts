@@ -9,7 +9,9 @@ export class CharacterSet {
 	public set: Set<string> = new Set<string>();
 
 	constructor(arg?: string | string[] | CharacterSet) {
-		this.AddCharacters(arg);
+		if (arg) {
+			this.AddCharacters(arg);
+		}
 	}
 
 	public readonly Add = (arg: string) => (

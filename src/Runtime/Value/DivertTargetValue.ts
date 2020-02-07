@@ -9,11 +9,11 @@ import {
 } from './ValueType';
 
 export class DivertTargetValue extends Value<RuntimePath> {
-  get targetPath(): RuntimePath {
+  get targetPath(): RuntimePath | null {
     return this.value;
   }
 
-  set targetPath(value: RuntimePath) {
+  set targetPath(value: RuntimePath | null) {
     this.value = value;
   }
 
@@ -25,8 +25,10 @@ export class DivertTargetValue extends Value<RuntimePath> {
     throw new Error('Shouldn\'t be checking the truthiness of a divert target');
   }
    
-  constructor(targetPath: RuntimePath = null) {
-    super(targetPath)
+  constructor(targetPath: RuntimePath | null = null) {
+    super();
+
+    this._value = targetPath;
   }
 
   public readonly Cast = (newType: ValueType): DivertTargetValue => {

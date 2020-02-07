@@ -48,7 +48,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // The following constants are related to IEEE 754 limits.
 //
 
-const pool = [];   // pool: entropy pool starts empty
+const pool: any[] = [];   // pool: entropy pool starts empty
 const WIDTH = 256; // width: each RC4 output is 0 <= x < 256
 const CHUNKS = 6;  // chunks: at least six RC4 outputs for each double
 const digits = 52; // digits: there are 52 significant digits in a double
@@ -59,7 +59,7 @@ const overflow = significance * 2;
 const mask = WIDTH - 1;
 
 function getRandom(seed: number): number {
-  const key = [];
+  const key: any[] = [];
 
   // Flatten the seed string or build one from local entropy if needed.
   mixkey(flatten(seed, 3), key);
@@ -152,7 +152,7 @@ class ARC4 {
 // flatten()
 // Converts an object tree to nested arrays of strings.
 //
-function flatten(obj: any, depth: number) {
+function flatten(obj: any, depth: number): any {
   const result = []
   let prop: any;
 

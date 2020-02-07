@@ -30,17 +30,17 @@ import {
 } from './Story';
 
 export abstract class Object {
-  public abstract GenerateRuntimeObject(): RuntimeObject;
+  public abstract readonly GenerateRuntimeObject: () => RuntimeObject | null;
 
-  private _alreadyHadError: boolean;
-  private _alreadyHadWarning: boolean;
-  private _debugMetadata: DebugMetadata;
-  private _runtimeObject: RuntimeObject;
+  private _alreadyHadError: boolean = false;
+  private _alreadyHadWarning: boolean = false;
+  private _debugMetadata: DebugMetadata | null = null;
+  private _runtimeObject: RuntimeObject | null = null;
 
-  public content: Object[];
-  public parent: Object;
+  public content: Object[] = [];
+  public parent: Object | null = null;
 
-  get debugMetadata(): DebugMetadata { 
+  get debugMetadata() { 
     if (this._debugMetadata === null && this.parent) {
       return this.parent.debugMetadata;
     }
@@ -48,20 +48,22 @@ export abstract class Object {
     return this._debugMetadata;
   }
 
-  set debugMetadata(value: DebugMetadata) {
+  set debugMetadata(value: DebugMetadata | null) {
     this._debugMetadata = value;
   }
 
 
   get hasOwnDebugMetadata(): boolean {
-    return this._debugMetadata !== null;
+    return Boolean(this.debugMetadata);
   }
 
   get typeName(): string {
     return 'Object';
   }
 
-  public readonly GetType = (): string => this.typeName;
+  public readonly GetType = (): string => (
+    this.typeName
+  );
 
   get story(): Story {
     let ancestor: Object = this;
@@ -73,25 +75,25 @@ export abstract class Object {
   }
 
   get runtimeObject(): RuntimeObject {
-    if (this._runtimeObject == null) {
+    if (!this._runtimeObject) {
       this._runtimeObject = this.GenerateRuntimeObject();
       if (this._runtimeObject) {
         this._runtimeObject.debugMetadata = this.debugMetadata;
       }
     }
 
-    return this._runtimeObject;
+    return this._runtimeObject as RuntimeObject;
   }
 
   set runtimeObject(value: RuntimeObject) {
     this._runtimeObject = value;
   }
 
-  // (formerly) virtual so that certain object types can return a different
-  // path than just the path to the main runtimeObject.
-  // e.g. a Choice returns a path to its content rather than
-  // its outer container.
   get runtimePath(): RuntimePath {
+    if (!this.runtimeObject.path) {
+      throw new Error();
+    }
+
     return this.runtimeObject.path;
   }
 
@@ -99,15 +101,15 @@ export abstract class Object {
   // types may have different containers that needs to be counted.
   // For most it'll just be the object's main runtime object,
   // but for e.g. choices, it'll be the target container.
-  get containerForCounting(): RuntimeContainer {
+  get containerForCounting(): RuntimeContainer | null {
     return this.runtimeObject as RuntimeContainer;
   }
 
-  public readonly PathRelativeTo = (otherObj: Object): Path => {
+  public readonly PathRelativeTo = (otherObj: Object): Path | null => {
     const ownAncestry = this.ancestry;
     const otherAncestry = otherObj.ancestry;
 
-    let highestCommonAncestor: Object = null;
+    let highestCommonAncestor: Object | null = null;
     const minLength: number = Math.min(
       ownAncestry.length,
       otherAncestry.length,
@@ -123,7 +125,7 @@ export abstract class Object {
       break;
     }
         
-    let commonFlowAncestor: FlowBase = highestCommonAncestor as FlowBase;
+    let commonFlowAncestor: FlowBase | null = highestCommonAncestor as FlowBase;
     if (commonFlowAncestor === null) {
       commonFlowAncestor = (highestCommonAncestor as FlowBase).ClosestFlowBase();
     }
@@ -131,7 +133,7 @@ export abstract class Object {
     let pathComponents: string[] = [];
     let hasWeavePoint: boolean = false;
     let baseFlow: FlowLevel = FlowLevel.WeavePoint;
-    let ancestor: Object = this;
+    let ancestor: Object | null = this;
 
     while (ancestor &&
       ancestor !== commonFlowAncestor &&
@@ -152,7 +154,7 @@ export abstract class Object {
       }
 
       const flowAncestor = ancestor as FlowBase;
-      if (flowAncestor) {
+      if (flowAncestor && flowAncestor.name) {
         pathComponents.push(flowAncestor.name);
         baseFlow = flowAncestor.flowLevel;
       }
@@ -186,7 +188,7 @@ export abstract class Object {
   get descriptionOfScope(): string {
     const locationNames: string[] = [];
 
-    let ancestor: Object = this;
+    let ancestor: Object | null = this;
     while (ancestor) {
       var ancestorFlow = ancestor as FlowBase;
       if (ancestorFlow && ancestorFlow.name != null) {
@@ -248,7 +250,9 @@ export abstract class Object {
     return subContent;
   }
 
-  public readonly Find = <T extends Object>(queryFunc: FindQueryFunc<T> = null): T => {
+  public readonly Find = <T extends Object>(
+    queryFunc: FindQueryFunc<T> | null = null,
+  ): T | null => {
     var tObj = this as any as T;
     if (tObj !== null && (queryFunc === null || queryFunc(tObj) === true)) {
       return tObj;
@@ -275,7 +279,7 @@ export abstract class Object {
     const found = Array.isArray(foundSoFar) ? foundSoFar : [];
 
     const tObj = this as any as T;
-    if (tObj !== null && (queryFunc === null || queryFunc(tObj) === true)) {
+    if (tObj !== null && (!queryFunc || queryFunc(tObj) === true)) {
       found.push(tObj);
     }
 
@@ -299,7 +303,7 @@ export abstract class Object {
     }
   };
 
-  public readonly ClosestFlowBase = (): FlowBase => {
+  public readonly ClosestFlowBase = (): FlowBase | null => {
     let ancestor = this.parent;
     while (ancestor) {
       if (ancestor instanceof FlowBase) {
@@ -314,7 +318,7 @@ export abstract class Object {
 
   public readonly Error = (
     message: string,
-    source: Object = null,
+    source: Object | null = null,
     isWarning: boolean = false,
   ): void => {
     if (source === null) {
@@ -341,7 +345,10 @@ export abstract class Object {
     }
   };
 
-  public readonly Warning = (message: string, source: Object = null): void => {
+  public readonly Warning = (
+    message: string,
+    source: Object | null = null,
+  ): void => {
     this.Error(message, source, true);
   };
 }

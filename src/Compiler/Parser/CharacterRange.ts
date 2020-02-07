@@ -9,7 +9,7 @@ export class CharacterRange {
   public static Define = (
     start: string,
     end: string,
-    excludes: string[] | CharacterSet = null,
+    excludes: string[] | CharacterSet = [],
   ): CharacterRange => new CharacterRange(start, end, excludes);
 
   private _correspondingCharSet: CharacterSet = new CharacterSet();
@@ -48,7 +48,7 @@ export class CharacterRange {
   /// <returns>The char set.</returns>
   public readonly ToCharacterSet = (): CharacterSet => {
     if (this._correspondingCharSet.set.size === 0) {
-      for (let ii = this.start, c = this._correspondingCharSet[ii]; ii <= this.end; ii += 1) {
+      for (let ii = this.start.charCodeAt(0), c = Array.from(this._correspondingCharSet.set)[ii]; ii <= this.end.charCodeAt(0); ii += 1) {
         if (!this._excludes.has(c)) {
           this._correspondingCharSet.AddCharacters(c);
         }

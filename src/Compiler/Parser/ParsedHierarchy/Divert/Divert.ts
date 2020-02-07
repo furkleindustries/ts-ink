@@ -48,30 +48,48 @@ import {
 } from '../Variable/VariableReference';
 
 export class Divert extends Object {
-  public targetContent: Object;
-  public runtimeDivert: RuntimeDivert;
-  public isFunctionCall: boolean;
-  public isEmpty: boolean;
-  public isTunnel: boolean;
-  public isThread: boolean;
+  public readonly args: Expression[] = [];
+
+  public readonly target: Path | null = null;
+  public targetContent: Object | null = null;
+  private _runtimeDivert: RuntimeDivert | null = null;
+  get runtimeDivert(): RuntimeDivert {
+    if (!this._runtimeDivert) {
+      throw new Error();
+    }
+
+    return this._runtimeDivert;
+  }
+
+  set runtimeDivert(value: RuntimeDivert) {
+    this._runtimeDivert = value;
+  }
+
+  public isFunctionCall: boolean = false;
+  public isEmpty: boolean = false;
+  public isTunnel: boolean = false;
+  public isThread: boolean = false;
 
   get isEnd(): boolean { 
-    return this.target !== null &&
-      this.target.dotSeparatedComponents === 'END';
+    return Boolean(this.target && this.target.dotSeparatedComponents === 'END');
   }
 
   get isDone(): boolean { 
-    return this.target !== null &&
-      this.target.dotSeparatedComponents === 'DONE';
+    return Boolean(this.target && this.target.dotSeparatedComponents === 'DONE');
   }
 
   constructor(
-    public readonly target: Path,
-    public readonly args: Expression[] = null,
+    target?: Path | null | undefined,
+    args?: Expression[],
   ) {
     super();
 
-    if (args !== null) {
+    if (target) {
+      this.target = target;
+    }
+
+    if (args) {
+      this.args = args;
       this.AddContent(args);
     }
   }
@@ -121,22 +139,22 @@ export class Divert extends Object {
           container.AddContent(RuntimeControlCommand.EvalStart());
         }
 
-        let targetArguments: Argument[] = null;
+        let targetArguments: Argument[] | null = null;
         if (this.targetContent) {
           targetArguments = (this.targetContent as FlowBase).args;
         }
 
         for (let ii = 0; ii < this.args.length; ++ii) {
           const argToPass: Expression = this.args[ii];
-          let argExpected: Argument = null; 
-          if (targetArguments !== null && ii < targetArguments.length) { 
+          let argExpected: Argument | null = null; 
+          if (targetArguments && ii < targetArguments.length) { 
             argExpected = targetArguments[ii];
           }
 
           // Pass by reference: argument needs to be a variable reference
-          if (argExpected !== null && argExpected.isByReference) {
+          if (argExpected && argExpected.isByReference) {
             const varRef = argToPass as VariableReference;
-            if (varRef === null) {
+            if (!varRef) {
               this.Error(
                 `Expected variable name to pass by reference to 'ref ${argExpected.name}' but saw ${argToPass.ToString()}`,
               );
@@ -146,10 +164,10 @@ export class Divert extends Object {
 
             // Check that we're not attempting to pass a read count by reference
             const targetPath = new Path(varRef.path);
-            const targetForCount: Object = targetPath.ResolveFromContext(this);
-            if (targetForCount !== null) {
+            const targetForCount: Object | null = targetPath.ResolveFromContext(this);
+            if (targetForCount) {
               this.Error(
-                `can't pass a read count by reference. '${targetPath.dotSeparatedComponents}' is a knot/stitch/label, but '${this.target.dotSeparatedComponents}' requires the name of a VAR to be passed.`,
+                `can't pass a read count by reference. '${targetPath.dotSeparatedComponents}' is a knot/stitch/label, but '${this.target!.dotSeparatedComponents}' requires the name of a VAR to be passed.`,
               );
 
               break;
@@ -196,8 +214,8 @@ export class Divert extends Object {
   // When the divert is to a target that's actually a variable name
   // rather than an explicit knot/stitch name, try interpretting it
   // as such by getting the variable name.
-  public readonly PathAsVariableName = (): string => (
-    this.target.firstComponent
+  public readonly PathAsVariableName = () => (
+    this.target ? this.target.firstComponent : null
   );
 
   public readonly ResolveTargetContent = (): void => {
@@ -210,33 +228,44 @@ export class Divert extends Object {
       // at runtime? If so, there won't be any further reference resolution
       // we can do at this point.
       var variableTargetName = this.PathAsVariableName();
-      if (variableTargetName != null) {
+      if (variableTargetName) {
         const flowBaseScope = this.ClosestFlowBase();
-        const resolveResult = flowBaseScope.ResolveVariableWithName(
-          variableTargetName,
-          this,
-        );
-
-        if (resolveResult.found) {
-          // Make sure that the flow was typed correctly, given that we know that this
-          // is meant to be a divert target
-          if (resolveResult.isArgument) {
+        if (flowBaseScope) {
+          const resolveResult = flowBaseScope.ResolveVariableWithName(
+            variableTargetName,
+            this,
+          );
+  
+          if (resolveResult.found &&
+            resolveResult.isArgument &&
+            resolveResult.ownerFlow &&
+            resolveResult.ownerFlow.args)
+          {
+            // Make sure that the flow was typed correctly, given that we know that this
+            // is meant to be a divert target
             const argument = resolveResult.ownerFlow.args.find(({ name }) => (
               name === variableTargetName
             ));
-
-            if (!argument.isDivertTarget) {
-              this.Error(
-                `Since '${argument.name}' is used as a variable divert target (on ${this.debugMetadata}), it should be marked as: -> ${argument.name}`,
-                resolveResult.ownerFlow,
-              );
+            
+            if (argument) {
+              if (!argument.isDivertTarget) {
+                this.Error(
+                  `Since '${argument.name}' is used as a variable divert target (on ${this.debugMetadata}), it should be marked as: -> ${argument.name}`,
+                  resolveResult.ownerFlow,
+                );
+              }
+    
+              this.runtimeDivert.variableDivertName = variableTargetName;
             }
+  
+            return;
           }
-
-          this.runtimeDivert.variableDivertName = variableTargetName;
-
-          return;
         }
+
+      }
+
+      if (!this.target) {
+        throw new Error();
       }
 
       this.targetContent = this.target.ResolveFromContext(this);
@@ -246,6 +275,8 @@ export class Divert extends Object {
   public readonly ResolveReferences = (context: Story): void => {
     if (this.isEmpty || this.isEnd || this.isDone) {
       return;
+    } else if (!this.runtimeDivert) {
+      throw new Error();
     }
 
     if (this.targetContent) {
@@ -276,7 +307,13 @@ export class Divert extends Object {
     let isBuiltIn: boolean = false;
     let isExternal: boolean = false;
 
-    if (this.target.numberOfComponents == 1 ) {
+    if (!this.target) {
+      throw new Error();
+    } else if (this.target.numberOfComponents === 1) {
+      if (!this.target.firstComponent) {
+        throw new Error();
+      }
+
       // BuiltIn means TURNS_SINCE, CHOICE_COUNT, RANDOM or SEED_RANDOM
       isBuiltIn = FunctionCall.IsBuiltIn(this.target.firstComponent);
 
@@ -348,7 +385,7 @@ export class Divert extends Object {
     } else if (targetFlow === null && numArgs > 0) {
       this.Error('target needs to be a knot or stitch in order to pass arguments');
       return;
-    } else if (targetFlow.args === null && numArgs > 0) {
+    } else if (targetFlow.args === null || !targetFlow.args && numArgs > 0) {
       this.Error(`target (${targetFlow.name}) doesn't take parameters`);
       return;
     } else if (this.parent instanceof DivertTarget) {
@@ -389,13 +426,13 @@ export class Divert extends Object {
             `Target '${targetFlow.name}' expects a divert target for the parameter named -> ${flowArg.name} but saw ${divArgExpr}`,
             divArgExpr,
           );
-        } else if (varRef !== null) {
+        } else if (varRef) {
           // Passing 'a' instead of '-> a'? 
           // i.e. read count instead of divert target
           // Unfortunately have to manually resolve here since we're still in code gen
           const knotCountPath = new Path(varRef.path);
-          const targetForCount: Object = knotCountPath.ResolveFromContext(varRef);
-          if (targetForCount !== null) {
+          const targetForCount: Object | null = knotCountPath.ResolveFromContext(varRef);
+          if (targetForCount) {
             this.Error(
               `Passing read count of '${knotCountPath.dotSeparatedComponents}' instead of a divert target. You probably meant '${knotCountPath}'`,
             );
@@ -413,15 +450,15 @@ export class Divert extends Object {
   };
 
   public readonly CheckExternalArgumentValidity = (context: Story): void => {
-    const externalName: string = this.target.firstComponent;
-    const external: ExternalDeclaration = context.externals[externalName];
+    const externalName: string | null = this.target ? this.target.firstComponent : null;
+    const external = context.externals.get(externalName as any);
     if (!external) {
       throw new Error('external not found');
     }
 
     const externalArgCount: number = external.argumentNames.length;
     let ownArgCount = 0;
-    if (this.args !== null) {
+    if (this.args) {
       ownArgCount = this.args.length;
     }
 
@@ -434,7 +471,7 @@ export class Divert extends Object {
 
   public readonly Error = (
     message: string,
-    source:  Object = null, 
+    source:  Object | null = null, 
     isWarning: boolean = false,
   ): void => {
     // Could be getting an error from a nested Divert

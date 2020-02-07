@@ -21,7 +21,7 @@ import {
 } from '../Story';
 
 export class Conditional extends Object {
-  private _reJoinTarget: RuntimeControlCommand;
+  private _reJoinTarget: RuntimeControlCommand | null = null;
 
   constructor(
     public initialCondition: Expression,
@@ -72,9 +72,13 @@ export class Conditional extends Object {
   };
 
   public readonly ResolveReferences = (context: Story): void => {
-    const pathToReJoin = this._reJoinTarget.path;
+    const pathToReJoin = this._reJoinTarget!.path;
 
     for (const branch of this.branches) {
+      if (!branch.returnDivert) {
+        throw new Error();
+      }
+
       branch.returnDivert.targetPath = pathToReJoin;
     }
 

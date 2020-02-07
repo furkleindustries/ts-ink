@@ -1,18 +1,38 @@
 import {
+  CallStack,
+} from '../CallStack/CallStack';
+import {
+  FloatValue,
+} from '../Value/FloatValue';
+import {
+  IntValue,
+} from '../Value/IntValue';
+import {
+  JsonSerialization,
+} from '../JsonSerialization';
+import {
+  ListDefinitionsOrigin,
+} from '../ListDefinitionsOrigin';
+import {
+  ListValue,
+} from '../Value/ListValue';
+import {
   RuntimeObject,
 } from '../Object';
-import { StatePatch } from '../Story/StatePatch';
-import { CallStack } from '../CallStack/CallStack';
-import { Value } from '../Value/Value';
-import { ListDefinitionsOrigin } from '../ListDefinitionsOrigin';
-import { JsonSerialization } from '../JsonSerialization';
-import { IntValue } from '../Value/IntValue';
-import { FloatValue } from '../Value/FloatValue';
-import { VariablePointerValue } from '../Value/VariablePointerValue';
-import { RuntimeVariableAssignment } from './VariableAssignment';
-import { ListValue } from '../Value/ListValue';
+import {
+  StatePatch,
+} from '../Story/StatePatch';
+import {
+  Value,
+} from '../Value/Value';
+import {
+  RuntimeVariableAssignment,
+} from './VariableAssignment';
+import {
+  VariablePointerValue,
+} from '../Value/VariablePointerValue';
 
-type VariableChanged = (variableName: string, newValue: RuntimeObject) => void;
+type VariableChanged = (variableName: string, newValue: Value) => void;
 
 /// <summary>
 /// Encompasses all the global variables in an ink Story, and
@@ -20,14 +40,14 @@ type VariableChanged = (variableName: string, newValue: RuntimeObject) => void;
 /// code can be notified whenever the global variables change.
 /// </summary>
 export class VariablesState {
-  public variableChangedEvent: VariableChanged;
+  public variableChangedEvent?: VariableChanged;
 
-  private _globalVariables: Map<string, RuntimeObject> = new Map();
+  private _globalVariables: Map<string, Value> = new Map();
   get globalVariables() {
     return this._globalVariables;
   }
 
-  private _defaultGlobalVariables: Map<string, RuntimeObject> = new Map();
+  private _defaultGlobalVariables: Map<string, Value> = new Map();
   get defaultGlobalVariables() {
     return this._defaultGlobalVariables;
   }
@@ -41,7 +61,7 @@ export class VariablesState {
     this._callStack = value;
   }
 
-  private _changedVariablesForBatchObs: Set<string>;
+  private _changedVariablesForBatchObs: Set<string> | null = new Set();
   get changedVariablesForBatchObs() {
     return this._changedVariablesForBatchObs;
   }
@@ -50,16 +70,16 @@ export class VariablesState {
     return this._listDefsOrigin;
   }
 
-  private _patch: StatePatch;
-  get patch(): StatePatch {
+  private _patch: StatePatch | null = null;
+  get patch() {
     return this._patch;
   }
 
-  set patch(value: StatePatch) {
+  set patch(value: StatePatch | null) {
     this._patch = value;
   }
 
-  private _batchObservingVariableChanges: boolean;
+  private _batchObservingVariableChanges: boolean = false;
   get batchObservingVariableChanges(): boolean { 
     return this._batchObservingVariableChanges;
   }
@@ -71,10 +91,12 @@ export class VariablesState {
     } else {
       // Finished observing variables in a batch - now send 
       // notifications for changed variables all in one go.
-      if (this._changedVariablesForBatchObs) {
+      if (this.changedVariablesForBatchObs) {
         for (const variableName of this.changedVariablesForBatchObs) {
-          const currentValue = this.globalVariables[variableName];
-          this.variableChangedEvent(variableName, currentValue);
+          const currentValue = this.globalVariables.get(variableName);
+          if (this.variableChangedEvent && currentValue) {
+            this.variableChangedEvent(variableName, currentValue);
+          }
         }
       }
 
@@ -90,7 +112,7 @@ export class VariablesState {
     if (this.patch) {
       const global = this.patch.GetGlobal(variableName);
       if (global) {
-        return (global as Value).valueObject;
+        return (global as Value).value;
       }
     }
 
@@ -101,7 +123,7 @@ export class VariablesState {
     const global = this.globalVariables.get(variableName);
     const def = this.defaultGlobalVariables.get(variableName); 
     if (global || def) {
-      return ((global || def) as Value).valueObject;
+      return ((global || def) as Value).value;
     }
 
     return null;
@@ -111,8 +133,14 @@ export class VariablesState {
   {}
 
   public readonly ApplyPatch = (): void => {
+    if (!this.patch) {
+      throw new Error();
+    }
+
     for (const [ key, value ] of this.patch.globals) {
-      this.globalVariables.set(key, value);
+      if (value) {
+        this.globalVariables.set(key, value);
+      }
     }
 
     if (this.changedVariablesForBatchObs) {
@@ -129,7 +157,10 @@ export class VariablesState {
 
     for (const [ key, value ] of this.defaultGlobalVariables) {
       if (key in jToken) {
-        this.globalVariables.set(key, JsonSerialization.JTokenToRuntimeObject(jToken[key]));
+        this.globalVariables.set(
+          key,
+          JsonSerialization.JTokenToRuntimeObject(jToken[key]) as Value,
+        );
       } else {
         this.globalVariables.set(key, value);
       }
@@ -153,9 +184,8 @@ export class VariablesState {
     for (const [ key, value ] of this.globalVariables) {
       if (VariablesState.dontSaveDefaultValues) {
         // Don't write out values that are the same as the default global values
-        let defaultVal: RuntimeObject;
         if (this.defaultGlobalVariables.has(key)) {
-          if (this.RuntimeObjectsEqual(this.defaultGlobalVariables.get(key), defaultVal)) {
+          if (this.RuntimeObjectsEqual(this.defaultGlobalVariables.get(key), value)) {
             continue;
           }
         }
@@ -167,10 +197,16 @@ export class VariablesState {
   };
 
   public readonly RuntimeObjectsEqual = (
-    obj1: RuntimeObject,
-    obj2: RuntimeObject,
-  ) => {
-    if (typeof obj1 !== typeof obj2) {
+    obj1: RuntimeObject | null | undefined,
+    obj2: RuntimeObject | null | undefined,
+  ): boolean => {
+    if (obj1 === null ||
+      obj1 === undefined ||
+      obj2 === null ||
+      obj2 === undefined)
+    {
+      return false;
+    } else if (typeof obj1 !== typeof obj2) {
       return false;
     }
 
@@ -190,8 +226,8 @@ export class VariablesState {
     // Other Value type (using proper Equals: list, string, divert path)
     const val1 = obj1 instanceof Value ? obj1 : null;
     const val2 = obj2 instanceof Value ? obj2 : null;
-    if (val1) {
-      return val1.valueObject.Equals(val2.valueObject);
+    if (val1 && val2) {
+      return val1.value.Equals(val2.value);
     }
 
     throw new Error(`FastRoughDefinitelyEquals: Unsupported runtime object type: ${typeof obj1}`);
@@ -200,8 +236,8 @@ export class VariablesState {
   public readonly GetVariableWithName = (
     name: string,
     contextIndex = -1,
-  ): RuntimeObject => {
-    let varValue: RuntimeObject = this.GetRawVariableWithName(name, contextIndex);
+  ): RuntimeObject | null => {
+    let varValue: RuntimeObject | null = this.GetRawVariableWithName(name, contextIndex);
 
     // Get value from pointer?
     const varPointer = varValue instanceof VariablePointerValue ? varValue : null;
@@ -212,10 +248,8 @@ export class VariablesState {
     return varValue;
   };
 
-  public readonly TryGetDefaultVariableValue = (name: string): RuntimeObject => (
-    this.defaultGlobalVariables.has(name) ?
-      this.defaultGlobalVariables.get(name) :
-      null
+  public readonly GetDefaultVariableValue = (name: string): RuntimeObject | null => (
+    this.defaultGlobalVariables.get(name) || null
   );
 
   public readonly GlobalVariableExistsWithName = (name: string): boolean => (
@@ -227,8 +261,8 @@ export class VariablesState {
   public readonly GetRawVariableWithName = (
     name: string,
     contextIndex: number,
-  ): RuntimeObject => {
-    let varValue: RuntimeObject = null;
+  ): Value | null => {
+    let varValue: Value | null = null;
 
     // 0 context = global
     if (contextIndex == 0 || contextIndex == -1) {
@@ -237,7 +271,7 @@ export class VariablesState {
       }
 
       if (this.globalVariables.has(name)) {
-        return this.globalVariables.get(name);
+        return this.globalVariables.get(name) || null;
       }
 
       // Getting variables can actually happen during globals set up since you can do
@@ -246,7 +280,7 @@ export class VariablesState {
       // We need to do this check though in case a new global is added, so we need to
       // revert to the default globals dictionary since an initial value hasn't yet been set.
       if (this._defaultGlobalVariables && this.defaultGlobalVariables.has(name)) {
-        return this.defaultGlobalVariables.get(name);
+        return this.defaultGlobalVariables.get(name) || null;
       }
 
       const listItemValue = this.listDefsOrigin.FindSingleItemListWithName(
@@ -259,20 +293,20 @@ export class VariablesState {
     } 
 
     // Temporary
-    varValue = this.callStack.GetTemporaryVariableWithName(name, contextIndex);
+    varValue = this.callStack.GetTemporaryVariableWithName(name, contextIndex) as Value;
 
     return varValue;
   };
 
   public readonly ValueAtVariablePointer = (
     pointer: VariablePointerValue,
-  ): RuntimeObject => (
+  ): RuntimeObject | null => (
     this.GetVariableWithName(pointer.variableName, pointer.contextIndex)
   );
 
   public readonly Assign = (
     varAss: RuntimeVariableAssignment,
-    value: RuntimeObject,
+    value: Value,
   ): void => {
     let name = varAss.variableName;
     let contextIndex = -1;
@@ -300,7 +334,7 @@ export class VariablesState {
       // Then assign to the variable that the pointer is pointing to by name.
 
       // De-reference variable reference to point to
-      let existingPointer: VariablePointerValue = null;
+      let existingPointer: VariablePointerValue | null = null;
       do {
         existingPointer = this.GetRawVariableWithName(
           name,
@@ -336,18 +370,27 @@ export class VariablesState {
   ): void => {
     const oldList = oldValue instanceof ListValue ? oldValue : null;
     const newList = newValue instanceof ListValue ? newValue : null;
-    if (oldList && newList && !newList.value.Size()) {
+    if (oldList &&
+      oldList.value &&
+      newList &&
+      newList.value &&
+      !newList.value.Size())
+    {
       newList.value.SetInitialOriginNames (oldList.value.originNames);
     }
   };
 
   public readonly SetGlobal = (
     variableName: string,
-    value: RuntimeObject,
+    value: Value,
   ): void => {
-    let oldValue: RuntimeObject = null;
-    if (this.patch === null || !this.patch.globals.has(variableName)) {
-      oldValue = this.globalVariables.get(variableName);
+    let oldValue: Value | null = null;
+    if (!this.patch || !this.patch.globals.has(variableName)) {
+      oldValue = this.globalVariables.get(variableName) || null;
+    }
+
+    if (!oldValue) {
+      throw new Error();
     }
 
     ListValue.RetainListOriginsForAssignment(oldValue, value);

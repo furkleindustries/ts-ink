@@ -43,8 +43,8 @@ export class Knot extends FlowBase {
       );
 
       if (knotWithStitchName) {
-        const stitch = this.subFlowsByName[stitchName];
-        const errorMsg = `Stitch '${stitch.name}' has the same name as a knot (on ${knotWithStitchName.debugMetadata})`;
+        const stitch = this.subFlowsByName.get(stitchName);
+        const errorMsg = `Stitch '${stitch ? stitch.name : 'NO STITCH FOUND'}' has the same name as a knot (on ${knotWithStitchName.debugMetadata})`;
         this.Error(errorMsg, stitch);
       }
     }

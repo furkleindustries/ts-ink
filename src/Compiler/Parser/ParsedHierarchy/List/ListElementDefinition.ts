@@ -15,7 +15,7 @@ import {
 } from '../SymbolType';
 
 export class ListElementDefinition extends Object {
-  public seriesValue: number;
+  public seriesValue: number = 0;
   get parent(): ListDefinition {
     return super.parent as ListDefinition;
   }
@@ -36,7 +36,7 @@ export class ListElementDefinition extends Object {
   constructor(
     public readonly name: string,
     public readonly inInitialList: boolean,
-    public readonly explicitValue: number = null,
+    public readonly explicitValue: number | null = null,
   ) {
     super();
   }

@@ -16,6 +16,14 @@ export class StringValue extends Value<string> {
     return ValueType.String;
   }
 
+  get value(): string {
+    if (!this.value) {
+      throw new Error();
+    }
+
+    return this._value as string;
+  }
+
   get isTruthy(): boolean {
     return this.value.length > 0;
   }
@@ -27,7 +35,9 @@ export class StringValue extends Value<string> {
   }
 
   constructor(str: string = '') {
-    super(str);
+    super();
+
+    this._value = str;
 
     // Classify whitespace status
     this.isNewline = this.value === "\n";
@@ -40,8 +50,8 @@ export class StringValue extends Value<string> {
     }
   }
 
-  public Cast = (newType: ValueType): Value => {
-    if (newType == this.valueType) {
+  public Cast = (newType: ValueType): Value | null => {
+    if (newType === this.valueType) {
       return this;
     }
 

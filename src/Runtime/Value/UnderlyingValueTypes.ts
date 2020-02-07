@@ -8,6 +8,7 @@ import {
 export type UnderlyingValueTypes =
   boolean |
   RuntimeInkList |
+  null |
   number |
   RuntimePath |
   string;

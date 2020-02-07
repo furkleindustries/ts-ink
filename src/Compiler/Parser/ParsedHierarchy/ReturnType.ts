@@ -18,13 +18,15 @@ import {
 } from '../../../Runtime/Void';
 
 export class ReturnType extends Object {
-  public returnedExpression: Expression;
+  public returnedExpression: Expression | null = null;
 
-  constructor(returnedExpression: Expression = null) {
+  constructor(returnedExpression: Expression | null = null) {
     super();
             
     if (returnedExpression) {
-      this.returnedExpression = this.AddContent(returnedExpression);
+      this.returnedExpression = this.AddContent(
+        returnedExpression,
+      ) as Expression;
     }
   }
 

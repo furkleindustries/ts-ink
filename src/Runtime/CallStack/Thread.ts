@@ -16,11 +16,12 @@ import {
 import {
   RuntimeStory,
 } from '../Story/Story';
+import { RuntimeObject } from '../Object';
 
 export class CallStackThread {
-  public callstack: CallStackElement[];
-  public threadIndex: number;
-  public previousPointer: Pointer;
+  public callstack: CallStackElement[] = [];
+  public threadIndex: number = 0;
+  public previousPointer: Pointer | null = null;
 
   constructor(jThreadObj?: Record<string, any>, storyContext?: RuntimeStory) {
     if (!jThreadObj || !storyContext) {
@@ -34,23 +35,23 @@ export class CallStackThread {
         const pushPopType: PushPopType = jElementObj.type as PushPopType;
         let pointer = Pointer.Null;
 
-        let currentContainerPathStr: string = null;
+        let currentContainerPathStr: string | null = null;
         const currentContainerPathStrToken: any = jElementObj.cPath;
         if (currentContainerPathStrToken) {
           currentContainerPathStr = currentContainerPathStrToken.ToString();
 
           const threadPointerResult = storyContext.ContentAtPath(
-            new RuntimePath({ componentsString: currentContainerPathStr }),
+            new RuntimePath({ componentsString: currentContainerPathStr as string }),
           );
 
           pointer.container = threadPointerResult.container;
           pointer.index = jElementObj.idx;
 
-          if (threadPointerResult.obj == null) {
+          if (threadPointerResult.obj === null) {
             throw new Error("When loading state, internal story location couldn't be found: " + currentContainerPathStr + ". Has the story changed since this save data was created?");
           } else if (threadPointerResult.approximate) {
             storyContext.Warning(
-              `When loading state, exact internal story location couldn't be found: '${currentContainerPathStr}', so it was approximated to '${pointer.container.path.ToString()}' to recover. Has the story changed since this save data was created?`,
+              `When loading state, exact internal story location couldn't be found: '${currentContainerPathStr}', so it was approximated to '${pointer.container.path!.ToString()}' to recover. Has the story changed since this save data was created?`,
             );
           }
         }
@@ -62,7 +63,7 @@ export class CallStackThread {
         if (temps) {
           el.temporaryVariables = JsonSerialization.JObjectToDictionaryRuntimeObjs(
             temps as Record<string, object>,
-          );
+          ) as Record<string, RuntimeObject>;
         } else {
           el.temporaryVariables = {};
         }
@@ -90,29 +91,29 @@ export class CallStackThread {
     return copy;
   };
 
-  public readonly GetSerializedRepresentation = (): object => ({
+  public readonly GetSerializedRepresentation = () => ({
     callstack: this.callstack.reduce((calls, call) => {
       if (!call.currentPointer.isNull) {
         return calls.concat([
           {
-            cPath: call.currentPointer.container.path.componentsString,
+            cPath: call.currentPointer.container!.path!.componentsString,
             idx: call.currentPointer.index,
           },
         ]);
       }
 
       return calls;
-    }, []),
+    }, [] as object[]),
 
     threadIndex: this.threadIndex,
 
-    ...(this.previousPointer.isNull ?
+    ...(!this.previousPointer || this.previousPointer.isNull ?
       {} :
-      { previousContentObject: this.previousPointer.Resolve().path.ToString() }
+      { previousContentObject: this.previousPointer.Resolve()!.path!.ToString() }
     ),
   });
 
   public readonly ToJson = (spaces?: number): string => (
-    JSON.stringify(this.GetSerializedRepresentation(), null, spaces || null)
+    JSON.stringify(this.GetSerializedRepresentation(), null, spaces || undefined)
   );
 }

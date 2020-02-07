@@ -85,20 +85,23 @@ export class StoryState {
   /// <summary>
   /// The current version of the state save file JSON-based format.
   /// </summary>
-  public readonly kInkSaveStateVersion = 8;
+  public readonly inkSaveStateVersion = 8;
   public readonly kMinCompatibleLoadVersion = 8;
 
-  public currentErrors: string[];
-  public currentWarnings: string[];
+  public currentErrors: string[] = [];
+  public currentWarnings: string[] = [];
   public variablesState: VariablesState;
   public callStack: CallStack;
   public evaluationStack: RuntimeObject[];
-  public divertedPointer: Pointer;
+  public divertedPointer: Pointer | null = null;
   public currentTurnIndex: number;
   public storySeed: number;
   public previousRandom: number;
-  public didSafeExit: boolean;
-  public story: RuntimeStory;
+  public didSafeExit: boolean = true;
+
+  get story() {
+    return this._story;
+  }
 
   // REMEMBER! REMEMBER! REMEMBER!
   // When adding state, update the Copy method and serialisation
@@ -140,8 +143,8 @@ export class StoryState {
     return this._currentChoices;
   }
 
-  private _patch: StatePatch;
-  get patch(): StatePatch {
+  private _patch: StatePatch | null = null;
+  get patch() {
     return this._patch;
   }
 
@@ -152,9 +155,9 @@ export class StoryState {
   /// <summary>
   /// String representation of the location where the story currently is.
   /// </summary>
-  get currentPathString(): string {
+  get currentPathString(): string | null {
     const pointer = this.currentPointer;
-    if (pointer.isNull) {
+    if (pointer.isNull || !pointer.path) {
       return null;
     }
 
@@ -169,11 +172,11 @@ export class StoryState {
     this.callStack.currentElement.currentPointer = value;
   }
 
-  get previousPointer(): Pointer { 
+  get previousPointer(): Pointer | null { 
     return this.callStack.currentThread.previousPointer;
   }
 
-  set previousPointer(value: Pointer) {
+  set previousPointer(value: Pointer | null) {
     this.callStack.currentThread.previousPointer = value;
   }
 
@@ -189,7 +192,7 @@ export class StoryState {
     return this.currentWarnings && this.currentWarnings.length > 0;
   }
 
-  private _currentText: string;
+  private _currentText: string = '';
   get currentText(): string {
     if (this.outputStreamTextDirty) {
       let sb = '';
@@ -208,7 +211,7 @@ export class StoryState {
     return this._currentText;
   }
 
-  private _currentTags: string[];
+  private _currentTags: string[] = [];
   get currentTags(): string[] {
     if (this.outputStreamTagsDirty) {
       this._currentTags = [];
@@ -234,8 +237,6 @@ export class StoryState {
   set inExpressionEvaluation(value: boolean) {
     this.callStack.currentElement.inExpressionEvaluation = value;
   }
-
-  
 
   get outputStreamEndsInNewline(): boolean {
     if (this.outputStream.length > 0) {
@@ -286,7 +287,7 @@ export class StoryState {
   /// </summary>
   /// <returns>The save state in json format.</returns>
   public readonly ToJson = (spaces?: number): string => (
-    JSON.stringify(this.GetSerializedRepresentation(), null, spaces || null)
+    JSON.stringify(this.GetSerializedRepresentation(), null, spaces || undefined)
   );
 
   /// <summary>
@@ -313,34 +314,39 @@ export class StoryState {
   public readonly VisitCountAtPathString = (
     pathString: string,
   ): number => {
-    let visitCountOut;
-
+    let visitCount: number | null | undefined;
     if (this.patch) {
       const container = this.story.ContentAtPath(
         new RuntimePath({ componentsString: pathString }),
       ).container;
 
+
       if (!container) {
         throw new Error(`Content at path not found: ${pathString}`);
       }
 
-      const visitCount = this.patch.TryGetVisitCount(container);
+      visitCount = this.patch.GetVisitCount(container);
       if (visitCount !== null) {
         return visitCount;
       }
     }
 
-    const visitCount = this.visitCounts.get(pathString);
+    visitCount = this.visitCounts.get(pathString);
     if (visitCount !== null && visitCount !== undefined) {
-      return visitCountOut;
+      return visitCount;
     }
 
     return 0;
   };
 
   public readonly VisitCountForContainer = (
-    container: RuntimeContainer,
+    container: RuntimeContainer | null,
   ): number => {
+    if (container === null) {
+      return 0;
+    }
+
+    let count: number | null | undefined;
     if (!container.visitsShouldBeCounted) {
       this.story.Error(
         `Read count for target (${container.name} - on ${container.debugMetadata}) unknown.`,
@@ -349,14 +355,27 @@ export class StoryState {
       return 0;
     }
 
-    if (this.patch && this.patch.TryGetVisitCount(container)) {
-      return this.patch.TryGetVisitCount(container);
+    if (this.patch) {
+      count = this.patch.GetVisitCount(container);
+      if (count !== null && count !== undefined) {
+        return count;
+      }
+    }
+
+    if (!container.path) {
+      return 0;
     }
 
     const containerPathStr = container.path.ToString();
-    const count = this.visitCounts.has(containerPathStr) ?
+    count = this.visitCounts.has(containerPathStr) ?
       this.visitCounts.get(containerPathStr) :
-      null;
+      0;
+
+    if (count !== null && count !== undefined) {
+      return count;
+    }
+
+    return 0;
   };
 
   public readonly IncrementVisitCountForContainer = (
@@ -368,6 +387,10 @@ export class StoryState {
       this.patch.SetVisitCount(container, currCount);
 
       return;
+    }
+
+    if (!container.path) {
+      throw new Error();
     }
 
     const containerPathStr = container.path.ToString();
@@ -387,13 +410,15 @@ export class StoryState {
   public readonly RecordTurnIndexVisitToContainer = (
     container: RuntimeContainer,
   ): void => {
-    if (!this.patch) {
+    if (this.patch) {
       this.patch.SetTurnIndex(container, this.currentTurnIndex);
       return;
+    } else if (!container.path) {
+      throw new Error();
     }
 
     const containerPathStr = container.path.ToString();
-    this.turnIndices[containerPathStr] = this.currentTurnIndex;
+    this.turnIndices.set(containerPathStr, this.currentTurnIndex);
   };
 
   public readonly TurnsSinceForContainer = (
@@ -405,12 +430,16 @@ export class StoryState {
       );
     }
 
-    let index = 0;
+    let index: number | null | undefined = 0;
     if (this.patch) {
-      index = this.patch.TryGetTurnIndex(container);
+      index = this.patch.GetTurnIndex(container);
       if (index !== null) {
         return this.currentTurnIndex - index;
       } 
+    }
+
+    if (!container.path) {
+      throw new Error();
     }
 
     const containerPathStr = container.path.ToString();
@@ -524,7 +553,7 @@ export class StoryState {
 
     copy.evaluationStack.push(...this.evaluationStack);
 
-    if (!this.divertedPointer.isNull) {
+    if (this.divertedPointer && !this.divertedPointer.isNull) {
       copy.divertedPointer = this.divertedPointer;
     }
 
@@ -575,6 +604,10 @@ export class StoryState {
     newCount: number,
     isVisit: boolean,
   ) => {
+    if (!container.path) {
+      throw new Error();
+    }
+
     const counts = isVisit ? this.visitCounts : this.turnIndices;
     counts.set(container.path.ToString(), newCount);
   }
@@ -583,6 +616,10 @@ export class StoryState {
     let hasChoiceThreads = false;
     const writer: Record<string, any> = {};
     for (const c of this.currentChoices) {
+      if (!c.threadAtGeneration) {
+        throw new Error();
+      }
+
       c.originalThreadIndex = c.threadAtGeneration.threadIndex;
 
       if (this.callStack.ThreadWithIndex(c.originalThreadIndex) === null) {
@@ -603,35 +640,26 @@ export class StoryState {
 
     writer.outputStream = JsonSerialization.WriteListRuntimeObjs(this.outputStream);
 
-    writer.WriteProperty("currentChoices", w => {
-      w.WriteArrayStart();
-      for (const c of this.currentChoices) {
-        JsonSerialization.WriteChoice(c);
-      }
+    writer.currentChoices = this.currentChoices.map(JsonSerialization.WriteChoice);
 
-      w.WriteArrayEnd();
-    });
-
-    if (!this.divertedPointer.isNull) {
-      writer.WriteProperty(
-        "currentDivertTarget",
-        this.divertedPointer.path.componentsString,
-      );
+    if (this.divertedPointer &&
+      !this.divertedPointer.isNull &&
+      this.divertedPointer.path)
+    {
+      writer.currentDivertTarget = this.divertedPointer.path.componentsString;
     }
 
-    writer.WriteProperty("visitCounts", w => JsonSerialization.WriteIntDictionary(this.visitCounts));
-    writer.WriteProperty("turnIndices", w => JsonSerialization.WriteIntDictionary(this.turnIndices));
+    writer.visitCounts = JsonSerialization.WriteIntDictionary(this.visitCounts);
+    writer.turnIndices = JsonSerialization.WriteIntDictionary(this.turnIndices);
 
-    writer.WriteProperty("turnIdx", this.currentTurnIndex);
-    writer.WriteProperty("storySeed", this.storySeed);
-    writer.WriteProperty("previousRandom", this.previousRandom);
+    writer.turnIdx = this.currentTurnIndex;
+    writer.storySeed = this.storySeed;
+    writer.previousRandom = this.previousRandom;
 
-    writer.WriteProperty("inkSaveVersion", this.kInkSaveStateVersion);
+    writer.inkSaveVersion = this.inkSaveStateVersion;
 
     // Not using this right now, but could do in future.
-    writer.WriteProperty("inkFormatVersion", this.story.inkVersionCurrent);
-
-    writer.WriteObjectEnd();
+    writer.inkFormatVersion = this.story.inkVersionCurrent;
 
     return writer;
   };
@@ -710,11 +738,11 @@ export class StoryState {
   }
 
   public readonly ResetErrors = (): void => {
-    this.currentErrors = null;
-    this.currentWarnings = null;
+    this.currentErrors = [];
+    this.currentWarnings = [];
   };
   
-  public readonly ResetOutput = (objs: RuntimeObject[] = null) => {
+  public readonly ResetOutput = (objs: RuntimeObject[] | null = null) => {
     this.outputStream.splice(0, this.outputStream.length);
     if (objs) {
       this.outputStream.push(...objs);
@@ -762,7 +790,7 @@ export class StoryState {
   //  - A newline on its own is returned in a list for consistency.
   public readonly TrySplittingHeadTailWhitespace = (
     single: StringValue,
-  ): StringValue[] => {
+  ): StringValue[] | null => {
     let str = single.value;
     let headFirstNewlineIdx = -1;
     let headLastNewlineIdx = -1;
@@ -880,11 +908,11 @@ export class StoryState {
       let glueTrimIndex = -1;
       for (let ii = this.outputStream.length - 1; ii >= 0; ii -= 1) {
         const o = this.outputStream[ii];
-        const c: RuntimeControlCommand = o instanceof RuntimeControlCommand ?
+        const c: RuntimeControlCommand | null = o instanceof RuntimeControlCommand ?
           o :
           null;
 
-        const g: RuntimeGlue = o instanceof RuntimeGlue ? o : null;
+        const g: RuntimeGlue | null = o instanceof RuntimeGlue ? o : null;
 
         if (g) {
           // Find latest glue
@@ -1005,7 +1033,7 @@ export class StoryState {
     this.OutputStreamDirty();
   };
 
-  public readonly PushEvaluationStack = (obj: RuntimeObject): void => {
+  public readonly PushEvaluationStack = (obj: RuntimeObject | null): void => {
     // Include metadata about the origin List for list values when
     // they're used, so that lower level functions can make use
     // of the origin list to get related items, or make comparisons
@@ -1023,30 +1051,30 @@ export class StoryState {
 
         for (const n of rawList.originNames) {
           const def = this.story.listDefinitions.GetListDefinition(n);
-          if (!rawList.origins.includes(def)) {
+          if (def && !rawList.origins.includes(def)) {
             rawList.origins.push(def);
           }
         }
       }
 
-      this.evaluationStack.push(obj);
+      this.evaluationStack.push(listValue);
     }
   };
 
   public readonly PopEvaluationStack = <T extends number | undefined = undefined>(
     numberOfObjects?: T,
   ): T extends (1 | undefined) ? RuntimeObject : RuntimeObject[] => {
-    if (numberOfObjects > this.evaluationStack.length) {
+    if (numberOfObjects && numberOfObjects > this.evaluationStack.length) {
       throw new Error('Trying to pop too many objects.');
     }
 
     const popped = this.evaluationStack.slice(
-      this.evaluationStack.length - numberOfObjects,
+      this.evaluationStack.length - (numberOfObjects as number),
       numberOfObjects,
     );
 
     this.evaluationStack.splice(
-      this.evaluationStack.length - numberOfObjects,
+      this.evaluationStack.length - (numberOfObjects as number),
       numberOfObjects,
     );
 
@@ -1108,7 +1136,9 @@ export class StoryState {
     }
   }
 
-  public readonly PopCallstack = (popType: PushPopType = null): void => {
+  public readonly PopCallstack = (
+    popType: PushPopType | null = null,
+  ): void => {
     // Add the end of a function call, trim any whitespace from the end.
     if (this.callStack.currentElement.type === PushPopType.Function) {
       this.TrimWhitespaceFromFunctionEnd();
@@ -1193,7 +1223,7 @@ export class StoryState {
     // Potentially pop multiple values off the stack, in case we need
     // to clean up after ourselves (e.g. caller of EvaluateFunction may 
     // have passed too many arguments, and we currently have no way to check for that)
-    let returnedObj: RuntimeObject = null;
+    let returnedObj: RuntimeObject | null = null;
     while (this.evaluationStack.length > originalEvaluationStackHeight) {
       const poppedObj = this.PopEvaluationStack();
       if (returnedObj === null || returnedObj === undefined) {
@@ -1216,12 +1246,12 @@ export class StoryState {
       // DivertTargets get returned as the string of components
       // (rather than a Path, which isn't public)
       if (returnVal.valueType === ValueType.DivertTarget) {
-        return String(returnVal.valueObject);
+        return String(returnVal.value);
       }
 
       // Other types can just have their exact object type:
       // int, float, string. VariablePointers get returned as strings.
-      return returnVal.valueObject;
+      return returnVal.value;
     }
 
     return null;

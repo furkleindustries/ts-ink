@@ -19,7 +19,7 @@ import {
 /// do with a C# List!
 /// </summary>
 export class RuntimeInkList {
-  private _map: Map<RuntimeInkListItem, number>;
+  private _map: Map<RuntimeInkListItem, number> = new Map();
 
   constructor({
     originStory,
@@ -35,7 +35,7 @@ export class RuntimeInkList {
     if (singleOriginListName && originStory instanceof RuntimeStory) {
       this.SetInitialOriginName(singleOriginListName);
   
-      let def: RuntimeListDefinition = originStory.listDefinitions.GetListDefinition(singleOriginListName);
+      let def: RuntimeListDefinition | null = originStory.listDefinitions.GetListDefinition(singleOriginListName);
       if (def) {
         this.origins = [ def ];
       } else {
@@ -46,8 +46,8 @@ export class RuntimeInkList {
     } else if (Array.isArray(singleElement) && singleElement.length === 2) {
       this.Add(singleElement[0], singleElement[1]);
     } else if (otherList instanceof RuntimeInkList) {
-      for (const key of otherList.Keys()) {
-        this.Add(key, otherList.Get(key));
+      for (const [ key, value ] of otherList.Entries()) {
+        this.Add(key, value);
       }
     }
   }
@@ -56,7 +56,7 @@ export class RuntimeInkList {
     this._map.set(key, value);
   };
 
-  public readonly Get = (key: RuntimeInkListItem): number => (
+  public readonly Get = (key: RuntimeInkListItem): number | null => (
     this._map.get(key) || null
   );
 
@@ -96,7 +96,7 @@ export class RuntimeInkList {
   public readonly AddItem = (item: RuntimeInkListItem | string): void => {
     if (typeof item === 'string') {
       const itemName: string = item as string;
-      let foundListDef: RuntimeListDefinition = null;
+      let foundListDef: RuntimeListDefinition | null = null;
       for (const origin of this.origins) {
         if (origin.name === itemName) {
           if (foundListDef !== null) {
@@ -109,7 +109,7 @@ export class RuntimeInkList {
         }
       }
 
-      if (foundListDef === null) {
+      if (!foundListDef) {
         throw new Error(
           `Could not add the item ${itemName} to this list because it isn't known to any list definitions previously associated with this list.`,
         );
@@ -126,15 +126,15 @@ export class RuntimeInkList {
     /// item's value can be looked up. By "known", we mean that it already has items in it from that source, or
     /// it did at one point - it can't be a completely fresh empty list, or a list that only contains items from
     /// a different list definition.
-    if (listItem.originName === null) {
+    if (listItem.originName === null && listItem.itemName) {
       this.AddItem(listItem.itemName);
       return;
     }
 
     for (const origin of this.origins) {
       if (origin.name === listItem.originName) {
-        let intVal = origin.items.get(listItem);
-        if (intVal >= 0) {
+        const intVal = origin.items.get(listItem);
+        if (intVal !== undefined && intVal >= 0) {
           this.Add(listItem, intVal);
           return;
         }
@@ -168,12 +168,8 @@ export class RuntimeInkList {
   // necessary for certain operations (e.g. interacting with ints).
   // Only the story has access to the full set of lists, so that
   // the origin can be resolved from the originListName.
-  public origins: RuntimeListDefinition[];
-  get originOfMaxItem(): RuntimeListDefinition {
-    if (this.origins === null) {
-      return null;
-    }
-
+  public origins: RuntimeListDefinition[] = [];
+  get originOfMaxItem(): RuntimeListDefinition | null {
     const maxOriginName = this.maxItem[0].itemName;
     for (const origin of this.origins.values()) {
       if (origin.name === maxOriginName) {
@@ -191,15 +187,17 @@ export class RuntimeInkList {
     if (this._map.size > 0) {
       this._originNames = [];
 
-      for (const [ key ] of this._map) {
-        this._originNames.push(key.originName);
+      for (const [ key ] of this._map.entries()) {
+        if (key.originName) {
+          this._originNames.push(key.originName);
+        }
       }
     }
 
     return this._originNames;
   }
 
-  private _originNames: string[];
+  private _originNames: string[] = [];
 
   public readonly SetInitialOriginName = (initialOriginName: string): void => {
     this._originNames = [ initialOriginName ];
@@ -207,7 +205,7 @@ export class RuntimeInkList {
 
   public readonly SetInitialOriginNames = (initialOriginNames: string[]): void => {
     if (initialOriginNames === null) {
-      this._originNames = null;
+      this._originNames = [];
     } else {
       this._originNames = [ ...initialOriginNames ];
     }
@@ -218,16 +216,15 @@ export class RuntimeInkList {
   /// </summary>
   get maxItem(): ListKeyValuePair {
     let max: [ RuntimeInkListItem, number ] = [
-      null,
-      null,
+      null as any,
+      -1,
     ];
 
-    for (const key of this.Keys()) {
-      const currentVal = this.Get(key);
-      if (key === null || max[1] > currentVal) {
+    for (const [ key, value ] of this.Entries()) {
+      if (max[1] > value) {
         max = [
           key,
-          currentVal,
+          value,
         ];
       }
     }
@@ -240,15 +237,15 @@ export class RuntimeInkList {
   /// </summary>
   get minItem(): ListKeyValuePair {
     let min: ListKeyValuePair = [
-      null,
-      null,
+      null as any,
+      -1,
     ];
 
-    for (const key of this.Keys()) {
-      if (key === null || this.Get(key) < min[1]) {
+    for (const [ key, value ] of this.Entries()) {
+      if (key === null || value < (min[1] as any)) {
         min = [
           key,
-          this.Get(key),
+          value,
         ];
       }
     }
@@ -263,9 +260,9 @@ export class RuntimeInkList {
     const list = new RuntimeInkList();
     if (this.origins !== null) {
       for (const origin of this.origins) {
-        for (const key of origin.items.keys()) {
+        for (const [ key, value ] of origin.items.entries()) {
           if (!this.Has(key)) {
-            list.Add(key, this.Get(key));
+            list.Add(key, value);
           }
         }
       }
@@ -282,8 +279,8 @@ export class RuntimeInkList {
     const list = new RuntimeInkList();
     if (this.origins !== null) {
       for (const origin of this.origins) {
-        for (const key of origin.items.keys()) {
-          list.Add(key, this.Get(key));
+        for (const [ key, value ] of origin.items.entries()) {
+          list.Add(key, value);
         }
       }
     }
@@ -304,7 +301,9 @@ export class RuntimeInkList {
           y[0].originName,
         ];
 
-        if (names[0] === names[1]) {
+        if (names[0] === null || names[1] === null) {
+          throw new Error();
+        } else if (names[0] === names[1]) {
           return 0;
         } else if (names[0] > names[1]) {
           return 1;
@@ -331,8 +330,8 @@ export class RuntimeInkList {
   /// </summary>
   public readonly Union = (otherList: RuntimeInkList): RuntimeInkList => {
     const union = new RuntimeInkList({ otherList: this });
-    for (const key of otherList.Keys()) {
-      union.Add(key, this.Get(key));
+    for (const [ key, value ] of otherList.Entries()) {
+      union.Add(key, value);
     }
 
     return union;
@@ -345,9 +344,9 @@ export class RuntimeInkList {
   /// </summary>
   public readonly Intersect = (otherList: RuntimeInkList): RuntimeInkList => {
     const intersection = new RuntimeInkList();
-    for (const key of this.Keys()) {
+    for (const [ key, value ] of this.Entries()) {
       if (otherList.Has(key)) {
-        intersection.Add(key, this.Get(key));
+        intersection.Add(key, value);
       }
     }
 
@@ -389,6 +388,10 @@ export class RuntimeInkList {
 
   public readonly Keys = (): RuntimeInkListItem[] => (
     Array.from(this._map.keys())
+  );
+
+  public readonly Entries = () => (
+    Array.from(this._map.entries())
   );
 
   public readonly Remove = (key: RuntimeInkListItem): void => {
@@ -489,7 +492,7 @@ export class RuntimeInkList {
     let ordered = this.orderedItems;
 
     let minValue = 0;
-    let maxValue: number = null;
+    let maxValue: number = null as any;
 
     if (typeof minBound === 'number') {
       minValue = minBound;
@@ -510,7 +513,7 @@ export class RuntimeInkList {
     const subList = new RuntimeInkList();
     subList.SetInitialOriginNames(this.originNames);
     for (const item of ordered) {
-      if (item[1] >= minValue && item[1] <= maxValue ) {
+      if (item[1] >= minValue && item[1] <= maxValue) {
         subList.Add(...item);
       }
     }

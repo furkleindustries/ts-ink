@@ -15,7 +15,14 @@ import {
 } from '../SymbolType';
 
 export class ConstantDeclaration extends Object {
-  public readonly expression: Expression;
+  private _expression: Expression | null = null;
+  get expression(): Expression {
+    if (!this._expression) {
+      throw new Error();
+    }
+
+    return this._expression;
+  }
 
   constructor(
     public readonly constantName: string,
@@ -25,11 +32,11 @@ export class ConstantDeclaration extends Object {
 
     // Defensive programming in case parsing of assignedExpression failed
     if (assignedExpression) {
-      this.expression = this.AddContent(assignedExpression);
+      this._expression = this.AddContent(assignedExpression) as Expression;
     }
   }
 
-  public readonly GenerateRuntimeObject = (): RuntimeObject => {
+  public readonly GenerateRuntimeObject = (): RuntimeObject | null => {
     // Global declarations don't generate actual procedural
     // runtime objects, but instead add a global variable to the story itself.
     // The story then initialises them all in one go at the start of the game.

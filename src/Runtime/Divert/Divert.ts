@@ -15,11 +15,11 @@ import {
 } from '../PushPopType';
 
 export class RuntimeDivert extends RuntimeObject {
-  private _targetPath: RuntimePath;
-  get targetPath(): RuntimePath { 
+  private _targetPath: RuntimePath | null = null;
+  get targetPath(): RuntimePath | null { 
     // Resolve any relative paths to global ones as we come across them
     if (this._targetPath && this._targetPath.isRelative) {
-      const targetObj = this.targetPointer.Resolve();
+      const targetObj = this.targetPointer ? this.targetPointer.Resolve() : null;
       if (targetObj) {
         this._targetPath = targetObj.path;
       }
@@ -28,19 +28,21 @@ export class RuntimeDivert extends RuntimeObject {
     return this._targetPath;
   }
 
-  set targetPath(value: RuntimePath) {
+  set targetPath(value: RuntimePath | null) {
     this._targetPath = value;
     this._targetPointer = Pointer.Null;
   } 
 
-  private _targetPointer: Pointer;
-  get targetPointer(): Pointer {
-    if (this._targetPointer.isNull) {
+  private _targetPointer: Pointer | null = null;
+  get targetPointer() {
+    if (!this.targetPointer || !this.targetPath) {
+      return null;
+    } else if (this.targetPointer.isNull) {
       const targetObj = this.ResolvePath(this.targetPath).obj;
 
-      if (this.targetPath.lastComponent.isIndex) {
-        this._targetPointer.container = targetObj.parent as RuntimeContainer;
-        this._targetPointer.index = this.targetPath.lastComponent.index;
+      if (this.targetPath.lastComponent && this.targetPath.lastComponent.isIndex) {
+        this.targetPointer.container = targetObj.parent as RuntimeContainer;
+        this.targetPointer.index = this.targetPath.lastComponent.index;
       } else {
         this._targetPointer = Pointer.StartOf(targetObj as RuntimeContainer);
       }
@@ -49,7 +51,7 @@ export class RuntimeDivert extends RuntimeObject {
     return this._targetPointer;
   }
 
-  get targetPathString(): string {
+  get targetPathString(): string | null {
     if (!this.targetPath) {
       return null;
     }
@@ -57,25 +59,25 @@ export class RuntimeDivert extends RuntimeObject {
     return this.CompactPathString(this.targetPath);
   }
 
-  set targetPathString(value: string) {
-    if (value == null) {
+  set targetPathString(value: string | null) {
+    if (value === null) {
       this.targetPath = null;
     } else {
       this.targetPath = new RuntimePath({ componentsString: value });
     }
   }
         
-  public variableDivertName: string;
+  public variableDivertName: string = '';
   get hasVariableTarget(): boolean {
     return Boolean(this.variableDivertName);
   }
 
   public pushesToStack: boolean;
-  public stackPushType: PushPopType;
+  public stackPushType: PushPopType | null = null;
 
-  public isExternal: boolean;
-  public externalArgs: number;
-  public isConditional: boolean;
+  public isExternal: boolean = false;
+  public externalArgs: number = 0;
+  public isConditional: boolean = false;
 
   constructor(stackPushType?: PushPopType) {
     super();
@@ -94,9 +96,10 @@ export class RuntimeDivert extends RuntimeObject {
       if (this.hasVariableTarget == otherDivert.hasVariableTarget) {
         if (this.hasVariableTarget) {
           return this.variableDivertName == otherDivert.variableDivertName;
+        } else if (this.targetPath) {
+          return this.targetPath.Equals(otherDivert.targetPath);
         }
 
-        return this.targetPath.Equals(otherDivert.targetPath);
       }
     }
 

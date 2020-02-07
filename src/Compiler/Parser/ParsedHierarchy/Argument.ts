@@ -1,8 +1,8 @@
 export class Argument {
   constructor(
-    public name: string = null,
-    public isByReference: boolean = null,
-    public isDivertTarget: boolean = null,
+    public name: string = '',
+    public isByReference: boolean | null = null,
+    public isDivertTarget: boolean | null = null,
   )
   {}
 }

@@ -27,14 +27,14 @@ import {
 } from '../../../Runtime/Void';
 
 export class TunnelOnwards extends Object {
-  private _overrideDivertTarget: DivertTargetValue;
+  private _overrideDivertTarget: DivertTargetValue | null = null;
 
-  private _divertAfter: Divert;
-  get divertAfter(): Divert {
+  private _divertAfter: Divert | null = null;
+  get divertAfter() {
     return this._divertAfter;
   };
 
-  set divertAfter(value: Divert) {
+  set divertAfter(value) {
     this._divertAfter = value;
     if (this._divertAfter) {
       this.AddContent(this._divertAfter);
@@ -94,6 +94,10 @@ export class TunnelOnwards extends Object {
   };
 
   public readonly ResolveReferences = (context: Story): void => {
+    if (!this._overrideDivertTarget) {
+      throw new Error();
+    }
+
     super.ResolveReferences(context);
 
     if (this.divertAfter && this.divertAfter.targetContent) {

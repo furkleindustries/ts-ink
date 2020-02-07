@@ -12,7 +12,7 @@ import {
 } from './Text';
 
 export class ContentList extends Object {
-  public dontFlatten: boolean;
+  public dontFlatten: boolean = false;
 
   get runtimeContainer(): RuntimeContainer {
     return this.runtimeObject as RuntimeContainer;

@@ -9,7 +9,7 @@ export class RuntimePathComponent {
   );
 
   public index: number;
-  public name: string;
+  public name: string | null;
 
   get isIndex(): boolean {
     return this.index >= 0;
@@ -37,7 +37,7 @@ export class RuntimePathComponent {
     }
   }
 
-  public readonly ToString = (): string => {
+  public readonly ToString = (): string | null => {
     if (this.isIndex) {
       return String(this.index);
     }

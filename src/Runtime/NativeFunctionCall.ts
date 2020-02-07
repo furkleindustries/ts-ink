@@ -39,13 +39,17 @@ export class NativeFunctionCall extends RuntimeObject {
 		return this._nativeFunctions;
 	}
 
-	private _prototype: NativeFunctionCall;
-	get prototype(): NativeFunctionCall {
+	private _prototype: NativeFunctionCall | null = null;
+	get prototype() {
+		if (!this._prototype) {
+			throw new Error();
+		}
+
 		return this._prototype;
 	}
 
-	private _isPrototype: boolean;
-	get isPrototype(): boolean {
+	private _isPrototype: boolean = false;
+	get isPrototype() {
 		return this._isPrototype;
 	}
 
@@ -103,9 +107,12 @@ export class NativeFunctionCall extends RuntimeObject {
 		return functionName in NativeFunctionCall.nativeFunctions;
 	};
 
-	private _name: string;
+	private _name: string | null = null;
+	get name() {
+		if (!this._name) {
+			throw new Error();
+		}
 
-	get name(): string { 
 		return this._name;
 	} 
 
@@ -129,7 +136,7 @@ export class NativeFunctionCall extends RuntimeObject {
 		this._numberOfParameters = value;
 	}
 
-	public readonly Call = (parameters: Value[]): Value => {
+	public readonly Call = (parameters: Value[]): Value | null => {
 		if (this.prototype) {
 			return this.prototype.Call(parameters);
 		} else if (this.numberOfParameters !== parameters.length) {
@@ -161,8 +168,8 @@ export class NativeFunctionCall extends RuntimeObject {
 		const coercedType: ValueType = coercedParams[0].valueType;
 		const paramCount = coercedParams.length;
 
-		if (paramCount == 2 || paramCount == 1) {
-			const opForTypeObj = NativeFunctionCall.operationFuncs[coercedType];
+		if (paramCount === 1 || paramCount === 2) {
+			const opForTypeObj = NativeFunctionCall.operationFuncs.get(coercedType);
 			if (!opForTypeObj) {
 				throw new StoryError(`Cannot perform operation '${this.name}' on ${coercedType}`);
 			}
@@ -171,23 +178,21 @@ export class NativeFunctionCall extends RuntimeObject {
 				// Binary
 				const resultVal = opForTypeObj(param1.value, param2.value);
 				return Value.Create(resultVal);
-			} else {
-				// Unary
-				const resultVal = opForTypeObj(param1.value);
-				return Value.Create(resultVal);
-			}  
-		} else {
-			throw new Error(
-				`Unexpected number of parameters to NativeFunctionCall: ${coercedParams.length}`,
-			);
+			}
+			
+			// Unary
+			const resultVal = (opForTypeObj as UnaryOp<any>)(param1.value);
+			return Value.Create(resultVal);
 		}
-
-		return null;
+		
+		throw new Error(
+			`Unexpected number of parameters to NativeFunctionCall: ${coercedParams.length}`,
+		);
 	};
 
 	public readonly CallBinaryListOperation = (
 		parameters: RuntimeObject[],
-	): Value => {
+	): Value | null => {
 		// List-Int addition/subtraction returns a List (e.g. "alpha" + 1 = "beta")
 		if ((this.name === '+' || this.name === '-') &&
 			parameters[0] instanceof ListValue &&
@@ -203,7 +208,7 @@ export class NativeFunctionCall extends RuntimeObject {
 			(v1.valueType !== ValueType.List || v2.valueType !== ValueType.List))
 		{
 			// And/or with any other type requires coerscion to bool (int)
-			const op = NativeFunctionCall.operationFuncs[ValueType.Int] as BinaryOp<number>;
+			const op = NativeFunctionCall.operationFuncs.get(ValueType.Int) as BinaryOp<number>;
 			const result = op(
 				Number(v1.isTruthy),
 				Number(v2.isTruthy),
@@ -230,17 +235,15 @@ export class NativeFunctionCall extends RuntimeObject {
 
 		const resultRawList = new RuntimeInkList();
 
-		for (const key of listVal.value.Keys()) {
-			const listItemValue = listVal.value.Get(key);
-
+		for (const [ key, value ] of listVal.value.Entries()) {
 			// Find + or - operation
-			const intOp = NativeFunctionCall.operationFuncs[ValueType.Int] as BinaryOp<number>;
+			const intOp = NativeFunctionCall.operationFuncs.get(ValueType.Int) as BinaryOp<number>;
 
 			// Return value unknown until it's evaluated
-			const targetInt = intOp(listItemValue, intVal.value) as number;
+			const targetInt = intOp(value, intVal.value) as number;
 
 			// Find this item's origin (linear search should be ok, should be short haha)
-			let itemOrigin: RuntimeListDefinition = null;
+			let itemOrigin: RuntimeListDefinition | null = null;
 			for (const origin of listVal.value.origins) {
 				if (origin.name === key.originName) {
 					itemOrigin = origin;
@@ -249,7 +252,9 @@ export class NativeFunctionCall extends RuntimeObject {
 			}
 
 			if (itemOrigin) {
-				const incrementedItem: RuntimeInkListItem = itemOrigin.GetItemWithValue(targetInt);
+				const incrementedItem: RuntimeInkListItem | null = itemOrigin.GetItemWithValue(
+					targetInt,
+				);
 				if (incrementedItem)
 					resultRawList.Add (incrementedItem, targetInt);
 			}
@@ -262,7 +267,7 @@ export class NativeFunctionCall extends RuntimeObject {
 		parametersIn: Value[],
 	): Value[] => {
 		let valType: ValueType = ValueType.Int;
-		let specialCaseList: ListValue = null;
+		let specialCaseList: ListValue | null = null;
 
 		// Find out what the output type is.
 		// "Higher level" types infect both so that binary operations
@@ -288,23 +293,28 @@ export class NativeFunctionCall extends RuntimeObject {
 			for (const val of parametersIn) {
 				if (val.valueType === ValueType.List) {
 					parametersOut.push(val);
-				} else if (val.valueType === ValueType.Int) {
-					const intVal = val.valueObject as number;
+				} else if (specialCaseList && val.valueType === ValueType.Int) {
+					const intVal = val.value as number;
 					const list = specialCaseList.value.originOfMaxItem;
-
-					const item: RuntimeInkListItem = list.GetItemWithValue(intVal);
-					if (item) {
-						const castedValue = new ListValue({
-							singleItem: [
-								item,
-								intVal,
-							],
-						});
-
-						parametersOut.push(castedValue);
-					} else {
+	
+					let item: RuntimeInkListItem | null = null;
+					if (list) {
+						item = list.GetItemWithValue(intVal);
+						if (item) {
+							const castedValue = new ListValue({
+								singleItem: [
+									item,
+									intVal,
+								],
+							});
+	
+							parametersOut.push(castedValue);
+						}
+					}
+					
+					if (!item) {
 						throw new StoryError(
-							`Could not find List item with the value ${intVal} in ${list.name}`,
+							`Could not find List item with the value ${intVal} in ${list ? list.name : 'no name'}`,
 						);
 					}
 				} else {
@@ -317,7 +327,9 @@ export class NativeFunctionCall extends RuntimeObject {
 			// Normal Coercing (with standard casting)
 			for (const val of parametersIn) {
 				const castedValue = val.Cast(valType);
-				parametersOut.push(castedValue);
+				if (castedValue) {
+					parametersOut.push(castedValue);
+				}
 			}
 		}
 

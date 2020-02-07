@@ -12,23 +12,23 @@ import {
 } from './Weave';
 
 export class Path {
-  private _baseTargetLevel: FlowLevel;
+  private _baseTargetLevel: FlowLevel | null;
   private _components: string[];
 
-  get baseTargetLevel(): FlowLevel {
+  get baseTargetLevel() {
     if (this.baseLevelIsAmbiguous) {
       return FlowLevel.Story;
     }
     
-    return this._baseTargetLevel as FlowLevel;
+    return this._baseTargetLevel;
   }
 
   get baseLevelIsAmbiguous(): boolean {
-    return this._baseTargetLevel === null;
+    return !this._baseTargetLevel;
   }
 
-  get firstComponent(): string {
-    if (this._components === null || this._components.length === 0) {
+  get firstComponent(): string | null {
+    if (!this._components || !this._components.length) {
       return null;
     }
 
@@ -49,10 +49,10 @@ export class Path {
   ) {
     if (Object.values(FlowLevel).includes(argOne as FlowLevel)) {
       this._baseTargetLevel = argOne as FlowLevel;
-      this._components = argTwo;
+      this._components = argTwo || [];
     } else if (Array.isArray(argOne)) {
       this._baseTargetLevel = null;
-      this._components = argTwo;
+      this._components = argTwo || [];
     } else {
       this._baseTargetLevel = null;
       this._components = [ argOne as string ];
@@ -71,7 +71,9 @@ export class Path {
     return `-> ${this.dotSeparatedComponents}`;
   };
       
-  public readonly ResolveFromContext = (context: ObjectType): ObjectType => {
+  public readonly ResolveFromContext = (
+    context: ObjectType,
+  ): ObjectType | null => {
     if (this._components == null || this._components.length == 0) {
       return null;
     }
@@ -94,12 +96,14 @@ export class Path {
 
   // Find the root object from the base, i.e. root from:
   //    root.sub1.sub2
-  public readonly ResolveBaseTarget = (originalContext: ObjectType): ObjectType => {
+  public readonly ResolveBaseTarget = (
+    originalContext: ObjectType,
+  ): ObjectType | null => {
     const firstComp = this.firstComponent;
 
     // Work up the ancestry to find the node that has the named object
-    let ancestorContext = originalContext;
-    while (ancestorContext !== null) {
+    let ancestorContext: ObjectType | null = originalContext;
+    while (ancestorContext) {
       // Only allow deep search when searching deeper from original context.
       // Don't allow search upward *then* downward, since that's searching *everywhere*!
       // Allowed examples:
@@ -110,14 +114,14 @@ export class Path {
       // (that latter example is quite loose, but we allow it)
       const deepSearch: boolean = ancestorContext === originalContext;
 
-      const foundBase = this.TryGetChildFromContext(
+      const foundBase = this.GetChildFromContext(
         ancestorContext,
         firstComp,
         null,
         deepSearch,
       );
 
-      if (foundBase !== null) {
+      if (foundBase) {
         return foundBase;
       }
 
@@ -131,8 +135,8 @@ export class Path {
   //   root.sub.finalChild
   public readonly ResolveTailComponents = (
     rootTarget: ObjectType,
-  ): ObjectType => {
-    let foundComponent = rootTarget;
+  ): ObjectType | null => {
+    let foundComponent: ObjectType | null = rootTarget;
     for (let ii = 1; ii < this._components.length; ++ii) {
       const compName = this._components[ii];
 
@@ -144,7 +148,7 @@ export class Path {
         minimumExpectedLevel = FlowLevel.WeavePoint;
       }
 
-      foundComponent = this.TryGetChildFromContext(
+      foundComponent = this.GetChildFromContext(
         foundComponent,
         compName,
         minimumExpectedLevel,
@@ -162,26 +166,27 @@ export class Path {
   // Can either be a named knot/stitch (a FlowBase) or a weave point within a Weave (Choice or Gather)
   // This function also ignores any other object types that are neither FlowBase nor Weave.
   // Called from both ResolveBase (force deep) and ResolveTail for the individual components.
-  public readonly TryGetChildFromContext = (
+  public readonly GetChildFromContext = (
     context: ObjectType,
-    childName: string,
-    minimumLevel: FlowLevel,
+    childName: string | null,
+    minimumLevel: FlowLevel | null,
     forceDeepSearch: boolean = false,
-  ): ObjectType => {
+  ): ObjectType | null => {
     // null childLevel means that we don't know where to find it
     const ambiguousChildLevel: boolean = minimumLevel === null;
 
     // Search for WeavePoint within Weave
     const weaveContext = context as Weave;
-    if (weaveContext !== null &&
-      (ambiguousChildLevel || minimumLevel == FlowLevel.WeavePoint))
+    if (childName &&
+      weaveContext !== null &&
+      (ambiguousChildLevel || minimumLevel === FlowLevel.WeavePoint))
     {
       return weaveContext.WeavePointNamed(childName) as ObjectType;
     }
 
     // Search for content within Flow (either a sub-Flow or a WeavePoint)
     var flowContext = context as FlowBase;
-    if (flowContext !== null) {
+    if (childName && flowContext !== null) {
       // When searching within a Knot, allow a deep searches so that
       // named weave points (choices and gathers) can be found within any stitch
       // Otherwise, we just search within the immediate object.

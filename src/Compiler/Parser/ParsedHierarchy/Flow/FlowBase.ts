@@ -56,22 +56,30 @@ import {
   Weave,
 } from '../Weave';
 
+type VariableResolveResult = {
+  found: boolean;
+  isGlobal: boolean;
+  isArgument: boolean;
+  isTemporary: boolean;
+  ownerFlow: FlowBase;
+};
+
 // Base class for Knots and Stitches
 export abstract class FlowBase extends Object implements INamedContent {
   public abstract readonly flowLevel: FlowLevel;
 
-  public _rootWeave: Weave;
-  public _subFlowsByName: Record<string, FlowBase>;
-  public _startingSubFlowDivert: RuntimeDivert;
-  public _startingSubFlowRuntime: RuntimeObject;
-  public _firstChildFlow: FlowBase;
-  public variableDeclarations: Record<string, VariableAssignment>;  
+  public _rootWeave: Weave | null = null;
+  public _subFlowsByName: Map<string, FlowBase> = new Map();
+  public _startingSubFlowDivert: RuntimeDivert | null = null;
+  public _startingSubFlowRuntime: RuntimeObject | null = null;
+  public _firstChildFlow: FlowBase | null = null;
+  public variableDeclarations: Map<string, VariableAssignment> = new Map();  
   
   get hasParameters() {
     return this.args !== null && this.args.length > 0;
   }
 
-  get subFlowsByName(): Record<string, FlowBase> {
+  get subFlowsByName() {
     return this._subFlowsByName;
   }
 
@@ -84,7 +92,7 @@ export abstract class FlowBase extends Object implements INamedContent {
   }
 
   constructor(
-    public readonly name: string | null = null,
+    public readonly name: string = '',
     topLevelObjects: Object[] | null = null,
     public readonly args: Argument[] | null = null,
     public readonly isFunction: boolean = false,
@@ -107,8 +115,6 @@ export abstract class FlowBase extends Object implements INamedContent {
     );
 
     this.AddContent(topLevelObjects);
-
-    this.variableDeclarations = {};
   };
 
   public readonly SplitWeaveAndSubFlowContent = (
@@ -118,7 +124,7 @@ export abstract class FlowBase extends Object implements INamedContent {
     const weaveObjs: Object[] = [];
     const subFlowObjs: Object[] = [];
 
-    this._subFlowsByName = {};
+    this._subFlowsByName = new Map();
 
     for (const obj of (contentObjs as FlowBase[])) {
       const subFlow = obj;
@@ -128,7 +134,7 @@ export abstract class FlowBase extends Object implements INamedContent {
         }
 
         subFlowObjs.push(obj);
-        this._subFlowsByName[subFlow.name] = subFlow;
+        this._subFlowsByName.set(subFlow.name, subFlow);
       } else {
         weaveObjs.push(obj);
       }
@@ -162,51 +168,46 @@ export abstract class FlowBase extends Object implements INamedContent {
     // empty by default, used by Story to process included file references
   };
 
-  public VariableResolveResult: {
-    found: boolean;
-    isGlobal: boolean;
-    isArgument: boolean;
-    isTemporary: boolean;
-    ownerFlow: FlowBase;
-  };
+  public VariableResolveResult?: VariableResolveResult | null | undefined;
 
   public ResolveVariableWithName = (
     varName: string,
     fromNode: Object,
-  ): this['VariableResolveResult'] => {
-    const result: this['VariableResolveResult'] = {} as any;
+  ): VariableResolveResult => {
+    const result: VariableResolveResult = {} as any;
 
     // Search in the stitch / knot that owns the node first
     const ownerFlow = fromNode === null ?
       this :
       fromNode.ClosestFlowBase();
 
-    // Argument
-    if (ownerFlow.args !== null ) {
-      for (const arg of ownerFlow.args) {
-        if (arg.name === varName) {
-          result.found = true;
-          result.isArgument = true;
-          result.ownerFlow = ownerFlow;
-          return result;
+    if (ownerFlow) {
+      // Argument
+      if (ownerFlow.args !== null ) {
+        for (const arg of ownerFlow.args) {
+          if (arg.name === varName) {
+            result.found = true;
+            result.isArgument = true;
+            result.ownerFlow = ownerFlow;
+            return result;
+          }
         }
+      }
+  
+      // Temp
+      if (ownerFlow !== this.story && ownerFlow.variableDeclarations.has(varName)) {
+        result.found = true;
+        result.ownerFlow = ownerFlow;
+        result.isTemporary = true;
+  
+        return result;
       }
     }
 
-    // Temp
-    const story = this.story; // optimisation
-    if (ownerFlow !== story && varName in ownerFlow.variableDeclarations) {
-      result.found = true;
-      result.ownerFlow = ownerFlow;
-      result.isTemporary = true;
-
-      return result;
-    }
-
     // Global
-    if (varName in story.variableDeclarations) {
+    if (varName in this.story.variableDeclarations) {
       result.found = true;
-      result.ownerFlow = story;
+      result.ownerFlow = this.story;
       result.isGlobal = true;
 
       return result;
@@ -217,13 +218,14 @@ export abstract class FlowBase extends Object implements INamedContent {
     return result;
   };
 
-  public TryAddNewVariableDeclaration = (varDecl: VariableAssignment): void => {
+  public AddNewVariableDeclaration = (varDecl: VariableAssignment): void => {
     const varName = varDecl.variableName;
-    if (varName in this.variableDeclarations) {
+    if (this.variableDeclarations.has(varName)) {
+      const varab = this.variableDeclarations.get(varName)!;
       let prevDeclError = '';
-      const debugMetadata = this.variableDeclarations[varName].debugMetadata;
-      if (debugMetadata !== null) {
-        prevDeclError = ` (${this.variableDeclarations[varName].debugMetadata})`;
+      const debugMetadata = varab.debugMetadata;
+      if (debugMetadata) {
+        prevDeclError = ` (${varab.debugMetadata})`;
       }
 
       this.Error(
@@ -235,7 +237,7 @@ export abstract class FlowBase extends Object implements INamedContent {
       return;
     }
 
-    this.variableDeclarations[varDecl.variableName] = varDecl;
+    this.variableDeclarations.set(varDecl.variableName, varDecl);
   };
 
   public ResolveWeavePointNaming = (): void => {
@@ -245,15 +247,13 @@ export abstract class FlowBase extends Object implements INamedContent {
       this._rootWeave.ResolveWeavePointNaming();
     }
 
-    if (this._subFlowsByName !== null) {
-      for (const key in this._subFlowsByName) {
-        this._subFlowsByName[key].ResolveWeavePointNaming();
-      }
+    for (const [ , value ] of this._subFlowsByName) {
+      value.ResolveWeavePointNaming();
     }
   }
         
   public readonly GenerateRuntimeObject = (): RuntimeObject => {
-    let foundReturn: ReturnType = null;
+    let foundReturn: ReturnType | null = null;
     if (this.isFunction) {
       this.CheckForDisallowedFunctionFlowControl();
     } else if (this.flowLevel === FlowLevel.Knot ||
@@ -309,15 +309,18 @@ export abstract class FlowBase extends Object implements INamedContent {
         }
 
         // Check for duplicate knots/stitches with same name
-        const namedChild: INamedContent = childFlowRuntime;
-        let existingChild: INamedContent = null;
-        if (existingChild = container.namedContent[namedChild.name]) {
+        const namedChild = childFlowRuntime as RuntimeObject & INamedContent;
+        const existingChild: RuntimeObject | null = container.namedContent.get(
+          namedChild.name,
+        ) || null;
+
+        if (existingChild) {
           const errorMsg = `${this.GetType()} already contains flow named '${namedChild.name}' (at ${(existingChild as any as RuntimeObject).debugMetadata})`;
           this.Error(errorMsg, childFlow);
         }
 
         container.AddToNamedContentOnly(namedChild);
-      } else {
+      } else if (obj) {
         // Other content (including entire Weaves that were grouped in the constructor)
         // At the time of writing, all FlowBases have a maximum of one piece of "other content"
         // and it's always the root Weave
@@ -366,14 +369,14 @@ export abstract class FlowBase extends Object implements INamedContent {
     name: string,
     level: FlowLevel | null = null,
     deepSearch: boolean = false,
-  ): Object => {
+  ): Object | null => {
     // Referencing self?
     if (level === this.flowLevel || level === null && name === this.name) {
       return this;
     }
 
     if (level === FlowLevel.WeavePoint || level === null) {
-      let weavePointResult: Object = null;
+      let weavePointResult: Object | null = null;
 
       if (this._rootWeave) {
         weavePointResult = this._rootWeave.WeavePointNamed(name) as Object;
@@ -394,11 +397,9 @@ export abstract class FlowBase extends Object implements INamedContent {
       return null;
     }
 
-    let subFlow: FlowBase | null = null;
+    let subFlow: FlowBase | null = this._subFlowsByName.get(name) || null;
 
-    if ((subFlow = this._subFlowsByName[name]) &&
-      (level === null || level === subFlow.flowLevel))
-    {
+    if (subFlow && (level === null || level === subFlow.flowLevel)) {
       return subFlow;
     }
 
@@ -416,9 +417,8 @@ export abstract class FlowBase extends Object implements INamedContent {
       return weaveResultSelf;
     }
 
-    for (const key in this._subFlowsByName) {
-      var subFlow = this._subFlowsByName[key];
-      var deepResult = subFlow.ContentWithNameAtLevel(
+    for (const [ , value ] of this._subFlowsByName) {
+      const deepResult = value.ContentWithNameAtLevel(
         name,
         null,
         true,
@@ -434,6 +434,10 @@ export abstract class FlowBase extends Object implements INamedContent {
 
   public ResolveReferences = (context: Story): void => {
     if (this._startingSubFlowDivert) {
+      if (!this._startingSubFlowRuntime) {
+        throw new Error();
+      }
+
       this._startingSubFlowDivert.targetPath = this._startingSubFlowRuntime.path;
     }
 
@@ -481,13 +485,17 @@ export abstract class FlowBase extends Object implements INamedContent {
       );
     }
 
+
     // Not allowed sub-flows
-    for (const name in this._subFlowsByName) {
-      const subFlow = this._subFlowsByName[name];
+    for (const [ key, value ] of this._subFlowsByName) {
       this.Error(
-        `Functions may not contain stitches, but saw '${name}' within the function '${this.name}'`,
-        subFlow,
+        `Functions may not contain stitches, but saw '${key}' within the function '${this.name}'`,
+        value,
       );
+    }
+
+    if (!this._rootWeave) {
+      throw new Error();
     }
 
     const allDiverts = this._rootWeave.FindAll<Divert>();

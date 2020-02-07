@@ -18,21 +18,26 @@ export const ParseSuccess = Symbol('ParseSuccessStruct');
 
 export type ParseRule = () => ParseRuleReturn;
 
-export type ParseRuleReturn = object | string | number | typeof StringParser['ParseSuccess'];
+export type ParseRuleReturn =
+  object |
+  string |
+  null |
+  number |
+  typeof StringParser['ParseSuccess'];
 
 export type SpecificParseRule<T extends ParseRule> = T;
 
 export abstract class StringParser {
-  public ParseRule: ParseRule;
+  public ParseRule: ParseRule | null = null;
 
   public static readonly ParseSuccess: typeof ParseSuccess = ParseSuccess;
   public static readonly numbersCharacterSet = new CharacterSet("0123456789");
 
   private _chars: string[];
   
-  public errorHandler: ErrorHandler;
+  public errorHandler: ErrorHandler | null = null;
   public state: StringParserState;
-  public hadError: boolean;
+  public hadError: boolean = false                                                                                                                                                                             ;
 
   constructor(str: string) {
     const strPreProc = this.PreProcessInputString(str);
@@ -83,7 +88,9 @@ export abstract class StringParser {
     const stateAtBeginRule = this.state.PeekPenultimate();
 
     // Allow subclass to receive callback
-    this.RuleDidSucceed(result, stateAtBeginRule, stateAtSucceedRule);
+    if (this.RuleDidSucceed) {
+      this.RuleDidSucceed(result, stateAtBeginRule, stateAtSucceedRule);
+    }
 
     // Flatten state stack so that we maintain the same values,
     // but remove one level in the stack.
@@ -97,16 +104,16 @@ export abstract class StringParser {
     return finalResult;
   };
 
-  public RuleDidSucceed: (
+  public RuleDidSucceed?: (
     result: ParseRuleReturn,
-    startState: StringParserElement,
+    startState: StringParserElement | null,
     endState: StringParserElement,
   ) => void;
       
   public readonly Expect = (
     rule: ParseRule,
-    message: string = null,
-    recoveryRule: ParseRule = null,
+    message: string | null = null,
+    recoveryRule: ParseRule | null = null,
   ): ParseRuleReturn => {
     let result: ParseRuleReturn = this.ParseObject(rule);
     if (result === null) {
@@ -143,7 +150,7 @@ export abstract class StringParser {
   ): void => {
     this.ErrorOnLine(
       message,
-      result.debugMetadata.startLineNumber,
+      result.debugMetadata ? result.debugMetadata.startLineNumber : -1,
       isWarning,
     );
   };
@@ -273,7 +280,7 @@ export abstract class StringParser {
     return null;
   };
 
-  public readonly OneOrMore = (rule: ParseRule): ParseRuleReturn[] => {
+  public readonly OneOrMore = (rule: ParseRule): ParseRuleReturn[] | null => {
     const results: ParseRuleReturn[] = [];
     let result: ParseRuleReturn = null;
 
@@ -357,8 +364,8 @@ export abstract class StringParser {
       this.TryAddResultToList(firstA, results, flatten);
     }
 
-    let lastMainResult: ParseRuleReturn = null;
-    let outerResult: ParseRuleReturn = null;
+    let lastMainResult: ParseRuleReturn | null = null;
+    let outerResult: ParseRuleReturn | null = null;
     do {
       // "until" condition hit?
       if (untilTerminator !== null && this.Peek(untilTerminator) !== null) {
@@ -403,7 +410,7 @@ export abstract class StringParser {
   // Basic string parsing
   //--------------------------------
 
-  public readonly ParseString = (str: string): string => {
+  public readonly ParseString = (str: string): string | null => {
     if (str.length > this.remainingLength) {
       return null;
     }
@@ -451,22 +458,22 @@ export abstract class StringParser {
       this.index += 1;
 
       return c;
-    } else {
-      return '0';
     }
+    
+    return '0';
   };
 
   public readonly ParseUntilCharactersFromString = (
     str: string,
     maxCount: number = -1,
-  ): string => (
+  ): string | null => (
     this.ParseCharactersFromString(str, false, maxCount)
   );
 
   public readonly ParseUntilCharactersFromCharSet = (
     charSet: CharacterSet,
     maxCount: number = -1,
-  ): string => (
+  ): string | null => (
     this.ParseCharactersFromCharSet(charSet, false, maxCount)
   );
 
@@ -474,7 +481,7 @@ export abstract class StringParser {
     str: string,
     maxCountOrShouldIncludeStrChars: boolean | number = -1,
     maxCount: number = -1,
-  ): string => {
+  ): string | null => {
     const charSet = new CharacterSet(str);
     if (typeof maxCountOrShouldIncludeStrChars === 'number') {
       return this.ParseCharactersFromCharSet(
@@ -495,7 +502,7 @@ export abstract class StringParser {
     charSet: CharacterSet,
     shouldIncludeChars: boolean = true,
     maxCount: number = -1,
-  ): string => {
+  ): string | null => {
     if (maxCount === -1) {
       maxCount = Number.MAX_SAFE_INTEGER;
     }
@@ -542,8 +549,8 @@ export abstract class StringParser {
 
   public ParseUntil(
     stopRule: ParseRule,
-    pauseCharacters: CharacterSet = null,
-    endCharacters: CharacterSet = null,
+    pauseCharacters: CharacterSet | null = null,
+    endCharacters: CharacterSet | null = null,
   ): string {
     const ruleId: number = this.BeginRule();
     const pauseAndEnd: CharacterSet = new CharacterSet();
@@ -562,18 +569,18 @@ export abstract class StringParser {
     }
 
     let parsedString = '';
-    let ruleResultAtPause: ParseRuleReturn = null;
+    let ruleResultAtPause: ParseRuleReturn | null = null;
 
     // Keep attempting to parse strings up to the pause (and end) points.
     //  - At each of the pause points, attempt to parse according to the rule
     //  - When the end point is reached (or EOF), we're done
     do {
       // TODO: Perhaps if no pause or end characters are passed, we should check *every* character for stopRule?
-      const partialParsedString: string = this.ParseUntilCharactersFromCharSet(
+      const partialParsedString: string | null = this.ParseUntilCharactersFromCharSet(
         pauseAndEnd,
       );
 
-      if (partialParsedString !== null) {
+      if (partialParsedString) {
         parsedString += partialParsedString;
       }
 

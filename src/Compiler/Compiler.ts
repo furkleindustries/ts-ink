@@ -52,23 +52,35 @@ export class Compiler {
     return this._options;
   }
 
-  private _pluginManager: PluginManager;
-  get pluginManager(): PluginManager {
+  private _pluginManager: PluginManager | null = null;
+  get pluginManager() {
     return this._pluginManager;
   }
 
-  private _parsedStory: Story;
+  private _parsedStory: Story | null = null;
   get parsedStory(): Story {
+    if (!this._parsedStory) {
+      throw new Error();
+    }
+
     return this._parsedStory; 
   }
 
-  private _runtimeStory: RuntimeStory;
+  private _runtimeStory: RuntimeStory | null = null;
   get runtimeStory(): RuntimeStory {
+    if (!this._runtimeStory) {
+      throw new Error();
+    }
+
     return this._runtimeStory;
   }
 
-  private _parser: InkParser;
+  private _parser: InkParser | null = null;
   get parser(): InkParser {
+    if (!this._parser) {
+      throw new Error();
+    }
+
     return this._parser;
   }
 
@@ -77,7 +89,7 @@ export class Compiler {
     return this._debugSourceRanges;
   }
 
-  constructor(inkSource: string, options: CompilerOptions = null) {
+  constructor(inkSource: string, options: CompilerOptions | null = null) {
     this._inputString = inkSource;
     this._options = options || new CompilerOptions();
     if (this.options.pluginNames !== null) {
@@ -88,7 +100,7 @@ export class Compiler {
   public readonly Compile = (): RuntimeStory => {
     this._parser = new InkParser(
       this.inputString,
-      this.options.sourceFilename,
+      this.options.sourceFilename || '',
       this.OnError,
       null,
       this.options.fileHandler,
@@ -100,11 +112,11 @@ export class Compiler {
       this.pluginManager.PostParse(this.parsedStory);
     }
 
-    if (this.parsedStory !== null && this.errors.length === 0) {
+    if (this.errors.length === 0) {
       this.parsedStory.countAllVisits = this.options.countAllVisits;
       this._runtimeStory = this.parsedStory.ExportRuntime(this.OnError);
 
-      if (this._pluginManager !== null) {
+      if (this.pluginManager) {
         this.pluginManager.PostExport(this.parsedStory, this.runtimeStory);
       }
     } else {
@@ -131,10 +143,10 @@ export class Compiler {
 
   public readonly DebugMetadataForContentAtOffset = (
     offset: number,
-  ): DebugMetadata => {
+  ): DebugMetadata | null => {
     let currOffset = 0;
 
-    let lastValidMetadata: DebugMetadata = null;
+    let lastValidMetadata: DebugMetadata | null = null;
     for (const range of this.debugSourceRanges) {
       if (range.debugMetadata !== null) {
         lastValidMetadata = range.debugMetadata;

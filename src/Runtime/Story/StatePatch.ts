@@ -4,10 +4,11 @@ import {
 import {
   RuntimeObject,
 } from '../Object';
+import { Value } from '../Value/Value';
 
 export class StatePatch {
-  private _globals: Map<string, RuntimeObject> = new Map();
-  get globals(): Map<string, RuntimeObject> {
+  private _globals: Map<string, Value | null> = new Map();
+  get globals() {
     return this._globals;
   }
 
@@ -26,7 +27,7 @@ export class StatePatch {
     return this._turnIndices;
   }
 
-  constructor(toCopy?: StatePatch) {
+  constructor(toCopy?: StatePatch | null | undefined) {
     if (toCopy) {
       this._globals = new Map(toCopy._globals);
       this._changedVariables = new Set(toCopy._changedVariables);
@@ -35,25 +36,29 @@ export class StatePatch {
     }
   }
 
-  public readonly GetGlobal = (name: string): RuntimeObject => (
-    this.globals.has(name) ? this.globals.get(name) : null
+  public readonly GetGlobal = (name: string): Value | null => (
+    this.globals.has(name) ?
+      (this.globals.get(name) || null) :
+      null
   );
 
   public readonly SetGlobal = (
     name: string,
-    value: RuntimeObject,
+    value: Value | null,
   ): void => {
-    this.globals[name] = value;
+    this.globals.set(name, value);
   }
 
   public readonly AddChangedVariable = (name: string) => {
     this.changedVariables.add(name);
   };
 
-  public readonly TryGetVisitCount = (
+  public readonly GetVisitCount = (
     container: RuntimeContainer,
-  ): number => (
-    this.visitCounts.has(container) ? this.visitCounts.get(container): null
+  ): number | null => (
+    this.visitCounts.has(container) ?
+      (this.visitCounts.get(container) || null) :
+      null
   );
 
   public readonly SetVisitCount = (
@@ -70,9 +75,11 @@ export class StatePatch {
     this.turnIndices.set(container, index);
   };
 
-  public readonly TryGetTurnIndex = (
+  public readonly GetTurnIndex = (
     container: RuntimeContainer,
-  ): number => (
-    this.turnIndices.has(container) ? this.turnIndices.get(container) : null
+  ): number | null => (
+    this.turnIndices.has(container) ?
+      (this.turnIndices.get(container) || null) :
+      null
   );
 }

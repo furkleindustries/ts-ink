@@ -26,7 +26,7 @@ export class RuntimeContainer
 {
   private _content: RuntimeObject[] = [];
 
-  public name: string;
+  public name: string = '';
 
   get content(): RuntimeObject[] { 
     return this._content;
@@ -38,7 +38,7 @@ export class RuntimeContainer
     }
   }
 
-  public namedContent: Map<string, INamedContent> = new Map();
+  public namedContent: Map<string, RuntimeObject & INamedContent> = new Map();
 
   get namedOnlyContent(): Map<string, RuntimeObject> { 
     let namedOnlyContentMap = new Map();
@@ -51,10 +51,6 @@ export class RuntimeContainer
       if (named && named.hasValidName) {
         namedOnlyContentMap.delete(named.name);
       }
-    }
-
-    if (Object.keys(namedOnlyContentMap).length === 0) {
-      namedOnlyContentMap = null;
     }
 
     return namedOnlyContentMap;
@@ -79,9 +75,9 @@ export class RuntimeContainer
     }
   }
 
-  public visitsShouldBeCounted: boolean;
-  public turnIndexShouldBeCounted: boolean;
-  public countingAtStartOnly: boolean;
+  public visitsShouldBeCounted: boolean = false;
+  public turnIndexShouldBeCounted: boolean = false;
+  public countingAtStartOnly: boolean = false;
                 
   get countFlags(): number {
     let flags: CountFlags = 0;
@@ -128,8 +124,8 @@ export class RuntimeContainer
     return this.name !== null && this.name.length > 0;
   }
 
-  get pathToFirstLeafContent(): RuntimePath {
-    if (this._pathToFirstLeafContent === null) {
+  get pathToFirstLeafContent(): RuntimePath | null {
+    if (!this._pathToFirstLeafContent && this.path) {
       this._pathToFirstLeafContent = this.path.PathByAppendingPath(
         this.internalPathToFirstLeafContent,
       );
@@ -138,7 +134,7 @@ export class RuntimeContainer
     return this._pathToFirstLeafContent;
   }
 
-  private _pathToFirstLeafContent: RuntimePath;
+  private _pathToFirstLeafContent: RuntimePath | null = null;
 
   get internalPathToFirstLeafContent(): RuntimePath {
     const components: RuntimePathComponent[] = [];
@@ -214,7 +210,7 @@ export class RuntimeContainer
 
   public readonly ContentWithPathComponent = (
     component: RuntimePathComponent,
-  ): RuntimeObject => {
+  ): RuntimeObject | null => {
     if (component.isIndex) {
       if (component.index >= 0 && component.index < this.content.length) {
         return this.content[component.index];
@@ -227,7 +223,7 @@ export class RuntimeContainer
       return this.parent;
     }
 
-    if (this.namedContent.has(component.name)) {
+    if (component.name && this.namedContent.has(component.name)) {
       return this.namedContent.get(component.name) as any;
     }
     
@@ -276,7 +272,7 @@ export class RuntimeContainer
   public readonly BuildStringOfHierarchy = (
     sb: string,
     indentation?: number,
-    pointedObj?: RuntimeObject,
+    pointedObj?: RuntimeObject | null,
   ): string => {
     let str = sb;
     let indent = indentation || 0;
@@ -331,12 +327,10 @@ export class RuntimeContainer
       str += '\n';
     }
 
-    const onlyNamed = {};
-    for (const key in this.namedContent) {
-      if (!(key in this.content)) {
-        onlyNamed[key] = this.namedContent[key];
-      } else {
-        continue;
+    const onlyNamed: Record<string, RuntimeObject & INamedContent> = {};
+    for (const [ key, value ] of this.namedContent) {
+      if (!this.content.includes(value)) {
+        onlyNamed[key] = value;
       }
     }
 
@@ -346,11 +340,11 @@ export class RuntimeContainer
       str += '-- named: --';
 
       for (const key in onlyNamed) {
-        if (!(onlyNamed[key] instanceof RuntimeContainer)) {
+        const container = onlyNamed[key];
+        if (!(container instanceof RuntimeContainer)) {
           throw new Error('Can only print out named Containers');
         }
 
-        const container = onlyNamed[key];
         container.BuildStringOfHierarchy(str, indent, pointed);
 
         str += 1;

@@ -25,6 +25,14 @@ export class ListValue extends Value<RuntimeInkList> {
     return ValueType.List;
   }
 
+  get value(): RuntimeInkList {
+    if (!this._value) {
+      throw new Error();
+    }
+
+    return this._value;
+  }
+
   // Truthy if it is non-empty
   get isTruthy(): boolean {
     return this.value.Size() > 0;
@@ -70,7 +78,7 @@ export class ListValue extends Value<RuntimeInkList> {
     singleItem?: ListKeyValuePair,
     singleValue?: number,
   } = {}) {
-    super(list || null);
+    super();
 
     if (list) {
       this._value = new RuntimeInkList({ otherList: list });

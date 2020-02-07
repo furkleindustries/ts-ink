@@ -50,50 +50,58 @@ export class Choice
     IWeavePoint,
     INamedContent
 {
-  private _condition: Expression;
-  private _innerContentContainer: RuntimeContainer;
-  private _outerContainer: RuntimeContainer;
-  private _runtimeChoice: ChoicePoint;
-  private _returnToR1: DivertTargetValue;
-  private _returnToR2: DivertTargetValue;
-  private _r1Label: RuntimeContainer;
-  private _r2Label: RuntimeContainer;
-  private _divertToStartContentOuter: RuntimeDivert;
-  private _divertToStartContentInner: RuntimeDivert;
-  private _startContentRuntimeContainer: RuntimeContainer;
+  private _condition: Expression | null = null;
+  private _innerContentContainer: RuntimeContainer | null = null;
+  private _outerContainer: RuntimeContainer | null = null;
+  private _runtimeChoice: ChoicePoint | null = null;
+  get runtimeChoice(): ChoicePoint {
+    if (!this._runtimeChoice) {
+      throw new Error();
+    }
+
+    return this._runtimeChoice;
+  }
+
+  private _returnToR1: DivertTargetValue | null = null;
+  private _returnToR2: DivertTargetValue | null = null;
+  private _r1Label: RuntimeContainer | null = null;
+  private _r2Label: RuntimeContainer | null = null;
+  private _divertToStartContentOuter: RuntimeDivert | null = null;
+  private _divertToStartContentInner: RuntimeDivert | null = null;
+  private _startContentRuntimeContainer: RuntimeContainer | null = null;
 
   public startContent: ContentList;
   public choiceOnlyContent: ContentList;
   public innerContent: ContentList;
-  public name: string;
+  public name: string = '';
   public onceOnly: boolean;
-  public isInvisibleDefault: boolean;
-  public indentationDepth: number;;
-  public hasWeaveStyleInlineBrackets: boolean;
+  public isInvisibleDefault: boolean = false;
+  public indentationDepth: number;
+  public hasWeaveStyleInlineBrackets: boolean = false;
 
-  get condition(): Expression { 
+  get condition() { 
     return this._condition;
   }
 
-  set condition(value: Expression) { 
+  set condition(value) { 
     this._condition = value; 
-    if (this._condition) {
-      this.AddContent(this._condition as Object);
+    if (value) {
+      this.AddContent(value as Object);
     }
   }
 
   // Required for IWeavePoint interface
   // Choice's target container. Used by weave to append any extra
   // nested weave content into.
-  get runtimeContainer(): RuntimeContainer {
+  get runtimeContainer() {
     return this._innerContentContainer;
   }
 
-  get innerContentContainer(): RuntimeContainer {
+  get innerContentContainer() {
     return this._innerContentContainer;
   }
 
-  get containerForCounting(): RuntimeContainer {
+  get containerForCounting() {
     return this._innerContentContainer;
   }
 
@@ -101,7 +109,11 @@ export class Choice
   // as opposed to the default implementation which would point to the choice itself
   // (or it's outer container), which is what runtimeObject is.
   get runtimePath(): RuntimePath {
-    return this._innerContentContainer.path;
+    if (!this.innerContentContainer || !this.innerContentContainer.path) {
+      throw new Error();
+    }
+
+    return this.innerContentContainer.path;
   }
 
   constructor(
@@ -289,7 +301,7 @@ export class Choice
   public ResolveReferences = (context: Story): void => {
     // Weave style choice - target own content container
     if (this._innerContentContainer) {
-      this._runtimeChoice.pathOnChoice = this._innerContentContainer.path;
+      this.runtimeChoice.pathOnChoice = this._innerContentContainer.path;
 
       if (this.onceOnly) {
         this._innerContentContainer.visitsShouldBeCounted = true;
@@ -297,18 +309,34 @@ export class Choice
     }
 
     if (this._returnToR1) {
+      if (!this._r1Label) {
+        throw new Error();
+      }
+
       this._returnToR1.targetPath = this._r1Label.path;
     }
 
     if (this._returnToR2) {
+      if (!this._r2Label) {
+        throw new Error();
+      }
+
       this._returnToR2.targetPath = this._r2Label.path;
     }
 
     if (this._divertToStartContentOuter) {
+      if (!this._startContentRuntimeContainer) {
+        throw new Error();
+      }
+
       this._divertToStartContentOuter.targetPath = this._startContentRuntimeContainer.path;
     }
 
     if (this._divertToStartContentInner) {
+      if (!this._startContentRuntimeContainer) {
+        throw new Error();
+      }
+
       this._divertToStartContentInner.targetPath = this._startContentRuntimeContainer.path;
     }
 
@@ -316,7 +344,7 @@ export class Choice
 
     if (this.name !== null && this.name.length > 0) {
       context.CheckForNamingCollisions(
-        this,
+        this as Object,
         this.name,
         SymbolType.SubFlowAndWeave,
       );

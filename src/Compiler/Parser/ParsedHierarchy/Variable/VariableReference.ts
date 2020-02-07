@@ -27,7 +27,7 @@ import {
 } from '../Weave';
 
 export class VariableReference extends Expression {
-  private _runtimeVarRef: RuntimeVariableReference;
+  private _runtimeVarRef: RuntimeVariableReference | null = null;
 
   // - Normal variables have a single item in their "path"
   // - Knot/stitch names for read counts are actual dot-separated paths
@@ -38,10 +38,10 @@ export class VariableReference extends Expression {
   }
 
   // Only known after GenerateIntoContainer has run
-  public isConstantReference: boolean;
-  public isListItemReference: boolean;
+  public isConstantReference: boolean = false;
+  public isListItemReference: boolean = false;
 
-  get runtimeVarRef(): RuntimeVariableReference {
+  get runtimeVarRef() {
     return this._runtimeVarRef;
   }
 
@@ -52,13 +52,13 @@ export class VariableReference extends Expression {
   public readonly GenerateIntoContainer = (
     container: RuntimeContainer,
   ): void => {
-    let constantValue: Expression = null;
+    let constantValue: Expression | null | undefined = this.story.constants.get(name);
 
     // If it's a constant reference, just generate the literal expression value
     // It's okay to access the constants at code generation time, since the
     // first thing the ExportRuntime function does it search for all the constants
     // in the story hierarchy, so they're all available.
-    if (constantValue = this.story.constants[name]) {
+    if (constantValue) {
       constantValue.GenerateConstantIntoContainer(container);
       this.isConstantReference = true;
 
@@ -70,8 +70,8 @@ export class VariableReference extends Expression {
     // List item reference?
     // Path might be to a list (listName.listItemName or just listItemName)
     if (this.path.length === 1 || this.path.length === 2) {
-      let listItemName: string = null;
-      let listName: string = null;
+      let listItemName: string = '';
+      let listName: string = '';
 
       if (this.path.length === 1) {
         listItemName = this.path[0];
@@ -104,8 +104,12 @@ export class VariableReference extends Expression {
 
     // Is it a read count?
     const parsedPath = new Path(this.path);
-    const targetForCount: Object = parsedPath.ResolveFromContext(this);
+    const targetForCount: Object | null = parsedPath.ResolveFromContext(this);
     if (targetForCount) {
+      if (!targetForCount.containerForCounting) {
+        throw new Error();
+      }
+
       targetForCount.containerForCounting.visitsShouldBeCounted = true;
 
       // If this is an argument to a function that wants a variable to be

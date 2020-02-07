@@ -16,12 +16,22 @@ export class IntValue extends Value<number> {
     return ValueType.Int;
   }
 
+  get value(): number {
+    if (!this._value) {
+      throw new Error();
+    }
+
+    return this._value;
+  }
+
   get isTruthy() {
     return this.value !== 0;
   }
 
   constructor(intVal: number = 0) {
-    super(intVal);
+    super();
+
+    this._value = intVal;
   }
 
   public readonly Cast = (newType: ValueType): Value => {

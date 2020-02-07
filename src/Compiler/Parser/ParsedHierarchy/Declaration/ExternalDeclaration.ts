@@ -17,7 +17,7 @@ export class ExternalDeclaration extends Object implements INamedContent {
     super();
   }
 
-  public readonly GenerateRuntimeObject = (): RuntimeObject => {
+  public readonly GenerateRuntimeObject = (): RuntimeObject | null => {
     this.story.AddExternal(this);
 
     // No runtime code exists for an external, only metadata

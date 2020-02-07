@@ -42,8 +42,23 @@ import {
 } from '../Variable/VariableReference';
 
 export class DivertTarget extends Expression {
-  private _runtimeDivert: RuntimeDivert;
-  private _runtimeDivertTargetValue: DivertTargetValue;
+  private _runtimeDivert: RuntimeDivert | null = null;
+  get runtimeDivert(): RuntimeDivert {
+    if (!this._runtimeDivert) {
+      throw new Error();
+    }
+
+    return this._runtimeDivert;
+  }
+
+  private _runtimeDivertTargetValue: DivertTargetValue | null = null;
+  get runtimeDivertTargetValue(): DivertTargetValue {
+    if (!this._runtimeDivertTargetValue) {
+      throw new Error();
+    }
+
+    return this._runtimeDivertTargetValue;
+  }
 
   public divert: Divert;
 
@@ -59,9 +74,9 @@ export class DivertTarget extends Expression {
     this.divert.GenerateRuntimeObject();
 
     this._runtimeDivert = this.divert.runtimeDivert as RuntimeDivert;
-    this._runtimeDivertTargetValue = new DivertTargetValue ();
+    this._runtimeDivertTargetValue = new DivertTargetValue();
 
-    container.AddContent(this._runtimeDivertTargetValue);
+    container.AddContent(this.runtimeDivertTargetValue);
   };
 
   public readonly ResolveReferences = (context: Story): void => {
@@ -76,12 +91,12 @@ export class DivertTarget extends Expression {
       return;
     }
 
-    let usageContext: Object = this;
+    let usageContext: Object | null = this;
     while (usageContext && usageContext instanceof Expression) {
       let badUsage: boolean = false;
       let foundUsage: boolean = false;
 
-      const usageParent = (usageContext as Expression).parent;
+      const usageParent: any = (usageContext as Expression).parent;
       if (usageParent instanceof BinaryExpression) {
         // Only allowed to compare for equality
 
@@ -150,14 +165,18 @@ export class DivertTarget extends Expression {
     // than a variable name. We can't really intelligently recover from this (e.g. if blah happens to
     // contain a divert target itself) since really we should be generating a variable reference
     // rather than a concrete DivertTarget, so we list it as an error.
-    if (this._runtimeDivert.hasVariableTarget) {
+    if (this.runtimeDivert.hasVariableTarget) {
+      if (!this.divert.target) {
+        throw new Error();
+      }
+
       this.Error(
         `Since '${this.divert.target.dotSeparatedComponents}' is a variable, it shouldn't be preceded by '->' here.`,
       );
     }
 
     // Main resolve
-    this._runtimeDivertTargetValue.targetPath = this._runtimeDivert.targetPath;
+    this.runtimeDivertTargetValue.targetPath = this.runtimeDivert.targetPath;
 
     // Tell hard coded (yet variable) divert targets that they also need to be counted
     // TODO: Only detect DivertTargets that are values rather than being used directly for
@@ -205,7 +224,10 @@ export class DivertTarget extends Expression {
   // Equals override necessary in order to check for CONST multiple definition equality
   public readonly Equals = (obj: Object): boolean => {
     const otherDivTarget = obj as DivertTarget;
-    if (otherDivTarget === null) {
+    if (!otherDivTarget ||
+      !this.divert.target ||
+      !otherDivTarget.divert.target)
+    {
       return false;
     }
 

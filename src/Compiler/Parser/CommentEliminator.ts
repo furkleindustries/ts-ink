@@ -19,14 +19,14 @@ export class CommentEliminator extends StringParser {
   public readonly Process = (): string  => {
     // Make both comments and non-comments optional to handle trivial empty file case (or *only* comments)
     const stringList: string[] = [
-      ...this.CommentsAndNewlines(),
+      ...(this.CommentsAndNewlines() || []),
       ...this.MainInk()
     ];
 
     if (stringList !== null) {
       return stringList.join('');
     } else {
-      return null;
+      return '';
     }
   };
 
@@ -39,7 +39,7 @@ export class CommentEliminator extends StringParser {
   public readonly CommentsAndNewlines = () => {
     const newLines: string[] = [
       ...this.ParseNewline(),
-      ...this.ParseSingleComment(),
+      ...(this.ParseSingleComment() || []),
     ];
 
     if (newLines !== null) {

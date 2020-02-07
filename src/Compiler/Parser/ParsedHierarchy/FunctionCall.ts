@@ -58,11 +58,11 @@ export class FunctionCall extends Expression {
   };
 
   private _proxyDivert: Divert;
-  private _divertTargetToCount: DivertTarget;
-  private _variableReferenceToCount: VariableReference;
+  private _divertTargetToCount: DivertTarget | null = null;
+  private _variableReferenceToCount: VariableReference | null = null;
 
   get name(): string {
-    return (this._proxyDivert.target as Path).firstComponent;
+    return (this._proxyDivert.target as Path).firstComponent || '';
   }
 
   get args(): Expression[] {
@@ -105,7 +105,7 @@ export class FunctionCall extends Expression {
     return this.name === 'READ_COUNT';
   }
 
-  public shouldPopReturnedValue: boolean;
+  public shouldPopReturnedValue: boolean = false;
 
   constructor(functionName: string, args: Expression[]) {
     super()
@@ -303,10 +303,18 @@ export class FunctionCall extends Expression {
           this.Error(`Failed to find target for TURNS_SINCE: '${divert.target}'`);
         }
       } else {
+        if (!targetObject.containerForCounting) {
+          throw new Error();
+        }
+
         targetObject.containerForCounting.turnIndexShouldBeCounted = true;
       }
     } else if (this._variableReferenceToCount) {
       const runtimeVarRef = this._variableReferenceToCount.runtimeVarRef;
+      if (!runtimeVarRef) {
+        throw new Error();
+      }
+
       if (runtimeVarRef.pathForCount !== null) {
         this.Error(
           `Should be '${name}'(-> '${this._variableReferenceToCount.name}). Usage without the '->' only makes sense for variable targets.`,

@@ -2,4 +2,7 @@ import {
   RuntimeInkListItem,
 } from './InkListItem';
 
-export type ListKeyValuePair = [ RuntimeInkListItem, number ];
+export type ListKeyValuePair = [
+  RuntimeInkListItem,
+  number,
+];

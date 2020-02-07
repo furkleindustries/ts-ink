@@ -16,12 +16,12 @@ import { StoryError } from '../Story/StoryError';
 import { ListValue } from '../Value/ListValue';
 
 export class CallStack {
-  private _threads: CallStackThread[];
+  private _threads: CallStackThread[] = [];
   get threads(): CallStackThread[] {
     return this._threads;
   }
 
-  private _threadCounter: number;
+  private _threadCounter: number = 0;
   get threadCounter(): number {
     return this._threadCounter;
   }
@@ -126,7 +126,7 @@ export class CallStack {
     JSON.stringify(
       this.GetSerializedRepresentation(),
       null,
-      spaces ? spaces : null,
+      spaces ? spaces : undefined,
     )
   );
 
@@ -179,7 +179,7 @@ export class CallStack {
     this.callStack.push(element);
   };
 
-  public readonly CanPop = (type: PushPopType = null) => {
+  public readonly CanPop = (type: PushPopType | null = null) => {
     if (!this.canPop) {
       return false;
     } else if (!type) {
@@ -189,7 +189,7 @@ export class CallStack {
     return this.currentElement.type === type;
   };
       
-  public readonly Pop = (type: PushPopType = null) => {
+  public readonly Pop = (type: PushPopType | null = null) => {
     if (this.CanPop(type)) {
       this.callStack.splice(this.callStack.length - 1, 1);
       return;
@@ -202,13 +202,13 @@ export class CallStack {
   public readonly GetTemporaryVariableWithName = (
     name: string,
     contextIndex = -1,
-  ): RuntimeObject => {
+  ): RuntimeObject | null => {
     if (contextIndex === -1) {
       contextIndex = this.currentElementIndex + 1;
     }
 
     const contextElement = this.callStack[contextIndex - 1];
-    const varValue: RuntimeObject = contextElement.temporaryVariables[name];
+    const varValue = contextElement.temporaryVariables[name];
 
     if (varValue) {
       return varValue;
@@ -257,8 +257,8 @@ export class CallStack {
     return 0;
   };
       
-  public readonly ThreadWithIndex = (index: number): CallStackThread => (
-    this.threads.find((t) => t.threadIndex === index)
+  public readonly ThreadWithIndex = (index: number): CallStackThread | null => (
+    this.threads.find((t) => t.threadIndex === index) || null
   );
 
   get callStackTrace(): string {
@@ -280,7 +280,11 @@ export class CallStack {
         const pointer = thread.callstack[ii].currentPointer;
         if (!pointer.isNull) {
           sb += '<SOMEWHERE IN ';
-          sb += pointer.container.path.ToString();
+          if (pointer.container && pointer.container.path) {
+            sb += pointer.container.path.ToString();
+          } else {
+            sb += 'UNKNOWN, NO PATH'
+          }
           sb += '>';
         }
       }

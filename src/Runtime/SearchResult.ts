@@ -16,7 +16,7 @@ export class SearchResult {
     return this.obj as RuntimeContainer;
   }
 
-  get correctObj(): RuntimeObject {
+  get correctObj(): RuntimeObject | null {
     return this.approximate ? null : this.obj;
   }
 

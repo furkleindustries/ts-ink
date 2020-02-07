@@ -9,6 +9,10 @@ import {
 // we really derive from Value<string>? That seems a bit misleading to me.
 export class VariablePointerValue extends Value<string> {
   get variableName(): string {
+    if (!this.value) {
+      throw new Error();
+    }
+    
     return this.value;
   }
 
@@ -31,8 +35,9 @@ export class VariablePointerValue extends Value<string> {
   public contextIndex: number;
 
   constructor(variableName: string, contextIndex: number = -1) { 
-    super(variableName);
+    super();
 
+    this._value = variableName;
     this.contextIndex = contextIndex;
   }
 

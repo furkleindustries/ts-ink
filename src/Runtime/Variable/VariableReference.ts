@@ -10,28 +10,32 @@ import {
 
 export class RuntimeVariableReference extends RuntimeObject {
   // Normal named variable
-  public name: string;
+  public name: string | null = null;
 
   // Variable reference is actually a path for a visit (read) count
-  public pathForCount: RuntimePath;
+  public pathForCount: RuntimePath | null = null;
 
-  get containerForCount(): RuntimeContainer {
+  get containerForCount(): RuntimeContainer | null {
+    if (!this.pathForCount) {
+      return null;
+    }
+
     return this.ResolvePath(this.pathForCount).container;
   }
       
-  get pathStringForCount(): string { 
-    if (this.pathForCount === null) {
+  get pathStringForCount(): string | null { 
+    if (!this.pathForCount) {
       return null;
     }
 
     return this.CompactPathString(this.pathForCount);
   }
 
-  set pathStringForCount(value: string) {
+  set pathStringForCount(value: string | null) {
     if (typeof value === 'string') {
-      this.pathForCount = null;
+      this.pathForCount = new RuntimePath({ componentsString: value });
     } else {
-      this.pathForCount = new RuntimePath(value);
+      this.pathForCount = null;
     }
   }
 

@@ -96,6 +96,10 @@ export class JsonSerialization {
     for (let ii = 0; ii < count; ii += 1) {
       const jTok = jArray [ii];
       const runtimeObj = JsonSerialization.JTokenToRuntimeObject(jTok);
+      if (!runtimeObj) {
+        throw new Error();
+      }
+
       list.push(runtimeObj);
     }
 
@@ -112,12 +116,12 @@ export class JsonSerialization {
   );
 
   public static readonly WriteIntDictionary = (
-    dict: Map<string, number>,
+    map: Map<string, number>,
   ): Record<string, number> => (
-    Array.from(dict.entries()).reduce((dict, val) => {
+    Array.from(map.entries()).reduce((dict, val) => {
       dict[val[0]] = dict[1];
       return dict;
-    }, {})
+    }, {} as Record<string, number>)
   );
 
   public static readonly WriteRuntimeObject = (
@@ -143,7 +147,7 @@ export class JsonSerialization {
         }
       }
 
-      let targetStr: string = divert.targetPathString;
+      let targetStr: string | null = divert.targetPathString;
       if (divert.hasVariableTarget) {
         targetStr = divert.variableDivertName;
       }
@@ -181,6 +185,10 @@ export class JsonSerialization {
     } else if (obj instanceof ListValue) {
       return JsonSerialization.WriteInkList(obj);
     } else if (obj instanceof DivertTargetValue) {
+      if (!obj.value) {
+        throw new Error();
+      }
+
       writer['^->'] = obj.value.componentsString;
       return writer;
     } else if (obj instanceof VariablePointerValue) {
@@ -203,7 +211,7 @@ export class JsonSerialization {
       return name;
     } else if (obj instanceof RuntimeVariableReference) {
       // Variable reference
-      const readCountPath: string = obj.pathStringForCount;
+      const readCountPath: string | null = obj.pathStringForCount;
       if (readCountPath !== null && readCountPath !== undefined) {
         writer['CNT?'] = readCountPath;
       } else {
@@ -238,8 +246,8 @@ export class JsonSerialization {
 
   public static readonly JObjectToDictionaryRuntimeObjs = (
     jObject: Record<string, any>,
-  ): Record<string, RuntimeObject> => {
-    const dict = {};
+  ): Record<string, RuntimeObject | null> => {
+    const dict: Record<string, RuntimeObject | null> = {};
     for (const key in jObject) {
       dict[key] = JsonSerialization.JTokenToRuntimeObject(jObject[key]);
     }
@@ -248,9 +256,9 @@ export class JsonSerialization {
   };
 
   public static readonly JObjectToIntDictionary = (
-    jObject: Record<string, any>,
+    jObject: Record<string, number>,
   ): Record<string, number> => {
-    const dict = {};
+    const dict: Record<string, number> = {};
     for (const key in jObject) {
       dict[key] = Number(jObject[key]);
     }
@@ -306,7 +314,7 @@ export class JsonSerialization {
   // Tag:            {"#": "the tag text"}
   public static readonly JTokenToRuntimeObject = (
     token: any,
-  ): RuntimeObject => {
+  ): RuntimeObject | null => {
     if (typeof token === 'number') {
       return Value.Create(token);
     }
@@ -513,11 +521,11 @@ export class JsonSerialization {
       writer.push({});
     }
 
-    const terminator = writer[writer.length - 1];
+    const terminator = writer[writer.length - 1] as Record<string, any>;
 
     if (namedOnlyContent) {
       for (const key in namedOnlyContent) {
-        const namedContainer = namedOnlyContent[key] as RuntimeContainer;
+        const namedContainer = namedOnlyContent.get(key) as RuntimeContainer;
         terminator[key] = JsonSerialization.WriteRuntimeContainer(namedContainer, true);
       }
     }
@@ -556,6 +564,10 @@ export class JsonSerialization {
           container.name = String(value);
         } else {
           const namedContentItem = JsonSerialization.JTokenToRuntimeObject(value);
+          if (!namedContentItem) {
+            return null;
+          }
+
           const namedSubContainer = namedContentItem as RuntimeContainer;
           if (namedSubContainer) {
             namedSubContainer.name = key;
@@ -597,12 +609,11 @@ export class JsonSerialization {
     const writer: Record<string, any> = {};
     const rawList = listVal.value;
 
-    writer.list = rawList.Keys().reduce((obj, key) => {
-      const value = rawList.Get(key);
+    writer.list = rawList.Entries().reduce((obj, [ key, value ]) => {
       const dictKey = `${key.originName || '?'}.${key.itemName}`;
       obj[dictKey] = value;
       return obj;
-    });
+    }, {} as Record<string, number>);
 
     if (rawList.Size() && rawList.originNames && rawList.originNames.length) {
       writer.origins = [ ...rawList.originNames ];

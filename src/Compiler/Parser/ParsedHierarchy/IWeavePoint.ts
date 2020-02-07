@@ -9,5 +9,5 @@ export interface IWeavePoint extends Object {
   readonly content: Object[];
   readonly indentationDepth: number;
   readonly name: string;
-  readonly runtimeContainer: RuntimeContainer;
+  readonly runtimeContainer: RuntimeContainer | null;
 }

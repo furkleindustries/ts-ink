@@ -81,11 +81,11 @@ export class Story extends FlowBase {
       return false;
   }
 
-  private _errorHandler: ErrorHandler;
-  private _hadError: boolean;
-  private _hadWarning: boolean;
+  private _errorHandler: ErrorHandler | null = null;
+  private _hadError: boolean = false;
+  private _hadWarning: boolean = false;
   private _dontFlattenContainers: Set<RuntimeContainer> = new Set();
-  private _listDefs: Record<string, ListDefinition>;
+  private _listDefs: Map<string, ListDefinition> = new Map();
 
   get flowLevel(): FlowLevel {
     return FlowLevel.Story;
@@ -99,8 +99,8 @@ export class Story extends FlowBase {
     return this._hadWarning;
   }
 
-  public constants: Record<string, Expression>;
-  public externals: Record<string, ExternalDeclaration>;
+  public constants: Map<string, Expression> = new Map();
+  public externals: Map<string, ExternalDeclaration> = new Map();
 
   // Build setting for exporting:
   // When true, the visit count for *all* knots, stitches, choices,
@@ -115,7 +115,7 @@ export class Story extends FlowBase {
   constructor(toplevelObjects: Object[], isInclude: boolean = false) {
     // Don't do anything much on construction, leave it lightweight until
     // the ExportRuntime method is called.
-    super(null, toplevelObjects, null, null, isInclude);
+    super('', toplevelObjects, null, false, isInclude);
   }
 
   // Before this function is called, we have IncludedFile objects interspersed
@@ -186,34 +186,40 @@ export class Story extends FlowBase {
     topLevelContent.splice(0, 0, ...flowsFromOtherFiles);
   };
 
-  public readonly ExportRuntime = (errorHandler: ErrorHandler = null): RuntimeStory => {
+  public readonly ExportRuntime = (
+    errorHandler: ErrorHandler | null = null,
+  ): RuntimeStory | null => {
     this._errorHandler = errorHandler;
 
     // Find all constants before main export begins, so that VariableReferences know
     // whether to generate a runtime variable reference or the literal value
-    this.constants = {};
+    this.constants = new Map();
 
     for (const constDecl of this.FindAll<ConstantDeclaration>()) {
       // Check for duplicate definitions
-      let existingDefinition: ConstantDeclaration = null;
-      if (existingDefinition = this.constants[constDecl.constantName] as any) {
-        if (existingDefinition.GenerateRuntimeObject().Equals(constDecl.expression)) {
+      const existingDefinition: ConstantDeclaration | null | undefined = this.constants.get(
+        constDecl.constantName,
+      ) as any;
+
+      if (existingDefinition) {
+        const runObj = existingDefinition.GenerateRuntimeObject() || { Equals: () => false };
+        if (runObj.Equals(constDecl.expression)) {
           const errorMsg = `CONST '${constDecl.constantName}' has been redefined with a different value. Multiple definitions of the same CONST are valid so long as they contain the same value. Initial definition was on ${existingDefinition.debugMetadata}.`;
           this.Error(errorMsg, constDecl, false);
         }
       }
 
-      this.constants[constDecl.constantName] = constDecl.expression;
+      this.constants.set(constDecl.constantName, constDecl.expression);
     }
 
     // List definitions are treated like constants too - they should be usable
     // from other variable declarations.
-    this._listDefs = {};
+    this._listDefs = new Map();
     for (const listDef of this.FindAll<ListDefinition>()) {
-      this._listDefs[listDef.name] = listDef;
+      this._listDefs.set(listDef.name, listDef);
     }
 
-    this.externals = {};
+    this.externals = new Map();
 
     // Resolution of weave point names has to come first, before any runtime code generation
     // since names have to be ready before diverts start getting created.
@@ -231,21 +237,24 @@ export class Story extends FlowBase {
 
     // Global variables are those that are local to the story and marked as global
     const runtimeLists = [];
-    for (const varName in this.variableDeclarations) {
-      const varDecl = this.variableDeclarations[varName];
-      if (varDecl.isGlobalDeclaration) {
-        if (varDecl.listDefinition != null) {
-          this._listDefs[varName] = varDecl.listDefinition;
+    for (const [ key, value ] of this.variableDeclarations) {
+      if (value.isGlobalDeclaration) {
+        if (value.listDefinition) {
+          this._listDefs.set(key, value.listDefinition);
           variableInitialisation.AddContent(
-            varDecl.listDefinition.runtimeObject,
+            value.listDefinition.runtimeObject!,
           );
 
-          runtimeLists.push(varDecl.listDefinition.runtimeListDefinition);
+          runtimeLists.push(value.listDefinition.runtimeListDefinition);
         } else {
-          varDecl.expression.GenerateIntoContainer(variableInitialisation);
+          if (!value.expression) {
+            throw new Error();
+          }
+
+          value.expression.GenerateIntoContainer(variableInitialisation);
         }
 
-        const runtimeVarAss = new RuntimeVariableAssignment(varName, true);
+        const runtimeVarAss = new RuntimeVariableAssignment(key, true);
         runtimeVarAss.isGlobal = true;
         variableInitialisation.AddContent(runtimeVarAss);
       }
@@ -297,9 +306,11 @@ export class Story extends FlowBase {
     return runtimeStory;
   };
 
-  public readonly ResolveList = (listName: string): ListDefinition => {
-    let list: ListDefinition;
-    if (!(list = this._listDefs[listName])) {
+  public readonly ResolveList = (
+    listName: string,
+  ): ListDefinition | null => {
+    let list: ListDefinition | null | undefined = this._listDefs.get(listName);
+    if (!list) {
       return null;
     }
 
@@ -309,13 +320,13 @@ export class Story extends FlowBase {
   public readonly ResolveListItem = (
     listName: string,
     itemName: string,
-    source: Object = null,
-  ): ListElementDefinition => {
-    let listDef: ListDefinition = null;
+    source: Object | null = null,
+  ): ListElementDefinition | null => {
+    let listDef: ListDefinition | null | undefined = null;
 
     // Search a specific list if we know its name (i.e. the form listName.itemName)
-    if (listName != null) {
-      if (!(listDef = this._listDefs[listName])) {
+    if (listName) {
+      if (!(listDef = this._listDefs.get(listName))) {
         return null;
       }
 
@@ -323,22 +334,21 @@ export class Story extends FlowBase {
     } else {
       // Otherwise, try to search all lists
 
-      let foundItem: ListElementDefinition = null;
-      let originalFoundList: ListDefinition = null;
+      let foundItem: ListElementDefinition | null = null;
+      let originalFoundList: ListDefinition | null = null;
 
-      for (const namedList in this._listDefs) {
-        const listToSearch = this._listDefs[namedList];
-        const itemInThisList = listToSearch.ItemNamed(itemName);
+      for (const [ key, value ] of this._listDefs.entries()) {
+        const itemInThisList = value.ItemNamed(itemName);
         if (itemInThisList) {
-          if (foundItem != null) {
+          if (foundItem) {
             this.Error(
-              `Ambiguous item name '${itemName}' found in multiple sets, including ${originalFoundList.name} and ${listToSearch.name}`,
+              `Ambiguous item name '${itemName}' found in multiple sets, including ${originalFoundList!.name} and ${value!.name}`,
               source,
               false,
             );
           } else {
             foundItem = itemInThisList;
-            originalFoundList = listToSearch;
+            originalFoundList = value!;
           }
         }
       }
@@ -408,8 +418,8 @@ export class Story extends FlowBase {
 
   public readonly Error = (
     message: string,
-    source: Object,
-    isWarning: boolean,
+    source: Object | null | undefined,
+    isWarning: boolean | null | undefined,
   ) => {
     let errorType: ErrorType = isWarning ? ErrorType.Warning : ErrorType.Error;
 
@@ -461,7 +471,7 @@ export class Story extends FlowBase {
     if (decl.name in this.externals) {
       this.Error(`Duplicate EXTERNAL definition of '${decl.name}'`, decl, false); 
     } else {
-      this.externals[decl.name] = decl;
+      this.externals.set(decl.name, decl);
     }
   };
 
@@ -486,7 +496,7 @@ export class Story extends FlowBase {
     obj: Object,
     name: string,
     symbolType: SymbolType,
-    typeNameOverride: string = null,
+    typeNameOverride: string = '',
   ): void => {
     const typeNameToPrint: string = typeNameOverride || obj.typeName;
     if (Story.IsReservedKeyword(name)) {
@@ -518,19 +528,18 @@ export class Story extends FlowBase {
     }
 
     // Lists
-    for (const listDefName in this._listDefs) {
-      const listDef = this._listDefs[listDefName];
-      if (name === listDefName &&
-        obj !== listDef &&
-        listDef.variableAssignment !== obj)
+    for (const [ key, value ] of this._listDefs) {
+      if (name === key &&
+        obj !== value &&
+        value.variableAssignment !== obj)
       {
-        this.NameConflictError(obj, name, listDef, typeNameToPrint);
+        this.NameConflictError(obj, name, value, typeNameToPrint);
       }
 
       // We don't check for conflicts between individual elements in 
       // different lists because they are namespaced.
       if (!(obj instanceof ListElementDefinition)) {
-        for (const item of listDef.itemDefinitions) {
+        for (const item of value.itemDefinitions) {
           if (name === item.name) {
             this.NameConflictError(obj, name, item, typeNameToPrint);
           }
@@ -545,11 +554,13 @@ export class Story extends FlowBase {
     }
 
     // Global variable collision
-    let varDecl: VariableAssignment = null;
-    if (varDecl = this.variableDeclarations[name]) {
-      if (varDecl != obj && varDecl.isGlobalDeclaration && varDecl.listDefinition == null) {
-        this.NameConflictError(obj, name, varDecl, typeNameToPrint);
-      }
+    const varDecl: VariableAssignment | null = this.variableDeclarations.get(name) || null;
+    if (varDecl &&
+      varDecl !== obj &&
+      varDecl.isGlobalDeclaration &&
+      varDecl.listDefinition == null)
+    {
+      this.NameConflictError(obj, name, varDecl, typeNameToPrint);
     }
 
     if (symbolType < SymbolType.SubFlowAndWeave) {
@@ -557,8 +568,8 @@ export class Story extends FlowBase {
     }
 
     // Stitches, Choices and Gathers
-    var path = new Path(name);
-    var targetContent = path.ResolveFromContext (obj);
+    const path = new Path(name);
+    const targetContent = path.ResolveFromContext (obj);
     if (targetContent && targetContent !== obj) {
       this.NameConflictError(obj, name, targetContent, typeNameToPrint);
       return;
@@ -570,12 +581,12 @@ export class Story extends FlowBase {
 
     // Arguments to the current flow
     if (symbolType !== SymbolType.Arg) {
-      let flow: FlowBase = obj as FlowBase;
-      if (flow === null ) {
+      let flow: FlowBase | null = obj as FlowBase;
+      if (!flow) {
         flow = obj.ClosestFlowBase();
       }
 
-      if (flow && flow.hasParameters) {
+      if (flow && flow.hasParameters && flow.args) {
         for (const arg of flow.args) {
           if (arg.name === name) {
             obj.Error(

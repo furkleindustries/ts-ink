@@ -33,16 +33,16 @@ import {
 } from '../Weave';
 
 export class ConditionalSingleBranch extends Object {
-  public _contentContainer: RuntimeContainer;
-  public _conditionalDivert: RuntimeDivert;
-  public _ownExpression: Expression;
-  public _innerWeave: Weave;
+  public _contentContainer: RuntimeContainer | null = null;
+  public _conditionalDivert: RuntimeDivert | null = null;
+  public _ownExpression: Expression | null = null;
+  public _innerWeave: Weave | null = null;
   // bool condition, e.g.:
   // { 5 == 4:
   //   - the true branch
   //   - the false branch
   // }
-  public isTrueBranch: boolean;
+  public isTrueBranch: boolean = false;
 
   // When each branch has its own expression like a switch statement,
   // this is non-null. e.g.
@@ -50,11 +50,11 @@ export class ConditionalSingleBranch extends Object {
   //    - 4: the value of x is four (ownExpression is the value 4)
   //    - 3: the value of x is three
   // }
-  get ownExpression(): Expression { 
+  get ownExpression() { 
     return this._ownExpression; 
   }
   
-  set ownExpression(value: Expression) { 
+  set ownExpression(value) { 
     this._ownExpression = value; 
     if (this._ownExpression) {
       this.AddContent(this._ownExpression); 
@@ -68,18 +68,18 @@ export class ConditionalSingleBranch extends Object {
   //    3 > 2:  This will happen
   //    2 > 3:  This won't happen
   // }
-  public matchingEquality: boolean;
+  public matchingEquality: boolean = false;
 
-  public isElse: boolean;
-  public isInline: boolean;
+  public isElse: boolean = false;
+  public isInline: boolean = false;
 
-  public returnDivert: RuntimeDivert;
+  public returnDivert: RuntimeDivert | null = null;
 
-  constructor(content: Object[]) {
+  constructor(content?: Object[] | null | undefined) {
     super();
 
     // Branches are allowed to be empty
-    if (content !== null) {
+    if (content) {
       this._innerWeave = new Weave(content);
       this.AddContent(this._innerWeave);
     }
@@ -184,6 +184,10 @@ export class ConditionalSingleBranch extends Object {
   };
 
   public readonly ResolveReferences = (context: Story): void => {
+    if (!this._conditionalDivert || !this._contentContainer) {
+      throw new Error();
+    }
+
     this._conditionalDivert.targetPath = this._contentContainer.path;
     super.ResolveReferences(context);
   };

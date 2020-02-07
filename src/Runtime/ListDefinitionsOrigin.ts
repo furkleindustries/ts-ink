@@ -6,18 +6,13 @@ import {
 } from './Value/ListValue';
 
 export class ListDefinitionsOrigin {
-  private _lists: Record<string, RuntimeListDefinition>;  
-  get lists(): RuntimeListDefinition[] {
-    const listOfLists: RuntimeListDefinition[] = [];
-    for (const key in this._lists) {
-      listOfLists.push(this._lists[key]);
-    }
-
-    return listOfLists;
+  private _lists: Map<string, RuntimeListDefinition> = new Map();  
+  get lists() {
+    return this._lists;
   }
 
-  private _allUnambiguousListValueCache: Record<string, ListValue>;
-  get allUnambiguousListValueCache(): Record<string, ListValue> {
+  private _allUnambiguousListValueCache: Map<string, ListValue> = new Map();
+  get allUnambiguousListValueCache() {
     return this._allUnambiguousListValueCache;
   }
 
@@ -25,33 +20,34 @@ export class ListDefinitionsOrigin {
   constructor(
     lists: RuntimeListDefinition[],
   ) {
-    this._lists = {};
-    this._allUnambiguousListValueCache = {};
-
     for (const list of lists) {
-      this.lists[list.name] = list;
+      this.lists.set(list.name, list);
 
-      for (const key of list.items.keys()) {
+      for (const [ key, value ] of list.items.entries()) {
+        if (!key.itemName || !key.fullName || !value) {
+          continue;
+        }
+
         const listValue = new ListValue({
           singleItem: [
             key,
-            list.items.get(key),
-          ]
+            value,
+          ],
         });
 
         // May be ambiguous, but compiler should've caught that,
         // so we may be doing some replacement here, but that's okay.
-        this._allUnambiguousListValueCache[key.itemName] = listValue;
-        this._allUnambiguousListValueCache[key.fullName] = listValue;
+        this.allUnambiguousListValueCache.set(key.itemName, listValue);
+        this.allUnambiguousListValueCache.set(key.fullName, listValue);
       }
     }
   }
 
   public readonly GetListDefinition = (name: string) => (
-    this.lists.find((def) => def.name === name) || null
+    this.lists.get(name) || null
   );
 
-  public readonly FindSingleItemListWithName = (name: string): ListValue => (
-    this.allUnambiguousListValueCache[name] || null
+  public readonly FindSingleItemListWithName = (name: string): ListValue | null => (
+    this.allUnambiguousListValueCache.get(name) || null
   );
 }

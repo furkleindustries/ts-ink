@@ -23,17 +23,17 @@ import {
   RuntimeVariableAssignment,
 } from '../../../../Runtime/Variable/VariableAssignment';
 import {
-  VariableReference,
+  RuntimeVariableReference,
 } from '../../../../Runtime/Variable/VariableReference';
 import {
   Weave,
 } from '../Weave';
 
 export class IncDecExpression extends Expression {
-  private _runtimeAssignment: RuntimeVariableAssignment;
+  private _runtimeAssignment: RuntimeVariableAssignment | null = null;
 
   public isInc: boolean;
-  public expression: Expression;
+  public expression: Expression | null = null;
 
   constructor(
     public readonly varName: string,
@@ -60,7 +60,7 @@ export class IncDecExpression extends Expression {
     // Reverse polish notation: (x 1 +) (assign to x)
 
     // 1.
-    container.AddContent(new VariableReference(this.varName));
+    container.AddContent(new RuntimeVariableReference(this.varName));
 
     // 2.
     // - Expression used in the form ~ x += y
@@ -93,6 +93,10 @@ export class IncDecExpression extends Expression {
       this.Error(
         `variable for ${this.incrementDecrementWord} could not be found: '${this.varName}' after searching: ${this.descriptionOfScope}`,
       );
+    }
+
+    if (!this._runtimeAssignment) {
+      throw new Error();
     }
 
     this._runtimeAssignment.isGlobal = varResolveResult.isGlobal;
