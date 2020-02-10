@@ -5,7 +5,7 @@ import {
   Stopwatch,
 } from '../dist';
 
-export class InkTestBed extends IFileHandler {
+export class InkTestBed {
   story = null;
   compiler = null;
 
