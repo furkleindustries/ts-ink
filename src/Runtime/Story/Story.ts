@@ -106,6 +106,7 @@ import {
 import {
   Void,
 } from '../Void';
+import { UnderlyingValueTypes } from '../Value/UnderlyingValueTypes';
 
 /// <summary>
 /// A RuntimeStory is the core class that represents a complete Ink narrative, and
@@ -1936,8 +1937,8 @@ export class RuntimeStory extends RuntimeObject {
   /// <param name="arguments">The arguments that the ink function takes, if any. Note that we don't (can't) do any validation on the number of arguments right now, so make sure you get it right!</param>
   public readonly EvaluateFunction = (
     functionName: string,
-    ...args: any[]
-  ): any => {
+    ...args: UnderlyingValueTypes[]
+  ) => {
     if (this.onEvaluateFunction) {
       this.onEvaluateFunction(functionName, args);
     }
@@ -1964,10 +1965,10 @@ export class RuntimeStory extends RuntimeObject {
     // State will temporarily replace the callstack in order to evaluate
     this.state.StartFunctionEvaluationFromGame(funcContainer, args);
 
-    // Evaluate the function, and collect the string output
-    let stringOutput = '';
+    // Evaluate the function, and collect the text output
+    let textOutput = '';
     while (this.canContinue) {
-      stringOutput += this.Continue();
+      textOutput += this.Continue();
     }
 
     // Restore the output stream in case this was called
@@ -1976,11 +1977,14 @@ export class RuntimeStory extends RuntimeObject {
 
     // Finish evaluation, and see whether anything was produced
     const result = this.state.CompleteFunctionEvaluationFromGame();
-    if (this.onCompleteEvaluateFunction) {
-      this.onCompleteEvaluateFunction(functionName, args, result);
+    if (result && this.onCompleteEvaluateFunction) {
+      this.onCompleteEvaluateFunction(functionName, args, String(result));
     }
 
-    return result;
+    return {
+      result,
+      textOutput,
+    };
   };
 
   // Evaluate a "hot compiled" piece of ink content, as used by the REPL-like

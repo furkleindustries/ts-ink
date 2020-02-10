@@ -31,6 +31,7 @@ import {
 import {
   VariablePointerValue,
 } from '../Value/VariablePointerValue';
+import { UnderlyingValueTypes } from '../Value/UnderlyingValueTypes';
 
 type VariableChanged = (variableName: string, newValue: Value) => void;
 
@@ -108,7 +109,14 @@ export class VariablesState {
   /// Get or set the value of a named global ink variable.
   /// The types available are the standard ink types.
   /// </summary>
-  public readonly $ = (variableName: string) => {
+  public readonly $ = (variableName: string, value?: UnderlyingValueTypes) => {
+    if (value !== undefined) {
+      const val = Value.Create(value);
+      if (val) {
+        this.SetGlobal(variableName, val);
+      }
+    }
+
     if (this.patch) {
       const global = this.patch.GetGlobal(variableName);
       if (global) {

@@ -73,6 +73,7 @@ import {
 import {
   Void,
 } from '../Void';
+import { UnderlyingValueTypes } from '../Value/UnderlyingValueTypes';
 
 /// <summary>
 /// All story state information is included in the StoryState class,
@@ -1210,7 +1211,7 @@ export class StoryState {
     return false;
   };
 
-  public readonly CompleteFunctionEvaluationFromGame = (): any => {
+  public readonly CompleteFunctionEvaluationFromGame = (): UnderlyingValueTypes | null => {
     if (this.callStack.currentElement.type !== PushPopType.FunctionEvaluationFromGame) {
       throw new StoryError(
         `Expected external function evaluation to be complete. Stack trace: ${this.callStack.callStackTrace}`,
